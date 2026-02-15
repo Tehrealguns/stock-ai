@@ -12,9 +12,8 @@ COPY . .
 # Create data directory for persistent SQLite DB
 RUN mkdir -p /data
 
-# Expose port
-EXPOSE 8888
+# Railway sets PORT dynamically
+ENV PORT=8888
 
-# Start the server
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8888"]
-
+# Start the server — uses $PORT from env
+CMD python -m uvicorn main:app --host 0.0.0.0 --port $PORT

@@ -26,6 +26,13 @@ import json
 _agent_task = None
 
 
+async def _delayed_agent_start():
+    """Wait a bit after server starts before running the agent, so healthcheck passes."""
+    await asyncio.sleep(10)  # Let the server be healthy first
+    print("🧠 StockMind agent starting first cycle...")
+    await start_agent_loop()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown."""
@@ -33,11 +40,11 @@ async def lifespan(app: FastAPI):
 
     # Init database
     await init_db()
+    print("✅ Database initialized")
 
-    # Start agent loop in background
-    interval = int(os.getenv("AGENT_INTERVAL_MINUTES", "15"))
-    _agent_task = asyncio.create_task(start_agent_loop(interval))
-    print(f"🧠 StockMind agent started (interval: {interval}min)")
+    # Start agent loop in background AFTER a short delay
+    _agent_task = asyncio.create_task(_delayed_agent_start())
+    print(f"🧠 StockMind server ready — agent will start in ~10s")
 
     yield
 

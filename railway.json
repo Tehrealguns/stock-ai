@@ -5,9 +5,8 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "python -m uvicorn main:app --host 0.0.0.0 --port $PORT",
     "restartPolicyType": "ALWAYS",
-    "healthcheckPath": "/api/status"
+    "healthcheckPath": "/api/status",
+    "healthcheckTimeout": 300
   }
 }
-
