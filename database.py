@@ -87,7 +87,6 @@ async def init_db():
         cursor = await db.execute("SELECT value FROM config WHERE key = 'cash_balance'")
         row = await cursor.fetchone()
         if not row:
-            import os
             starting = os.getenv("STARTING_BALANCE", "100000")
             await db.execute(
                 "INSERT INTO config (key, value) VALUES ('cash_balance', ?)",
