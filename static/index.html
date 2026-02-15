@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockMind — AI Investor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        dark: {
+                            50: '#f8fafc',
+                            100: '#e2e8f0',
+                            200: '#cbd5e1',
+                            300: '#94a3b8',
+                            400: '#64748b',
+                            500: '#475569',
+                            600: '#1e2030',
+                            700: '#181a2a',
+                            800: '#12141f',
+                            900: '#0c0e16',
+                        },
+                        accent: {
+                            green: '#22c55e',
+                            red: '#ef4444',
+                            blue: '#3b82f6',
+                            purple: '#a855f7',
+                            amber: '#f59e0b',
+                            cyan: '#06b6d4',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { scrollbar-width: thin; scrollbar-color: #1e2030 #0c0e16; }
+        *::-webkit-scrollbar { width: 6px; }
+        *::-webkit-scrollbar-track { background: #0c0e16; }
+        *::-webkit-scrollbar-thumb { background: #1e2030; border-radius: 3px; }
+        
+        body { background: #0c0e16; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        
+        .thought-enter { animation: thoughtSlide 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes thoughtSlide {
+            from { opacity: 0; transform: translateY(12px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .pulse-dot { animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+
+        .gradient-border {
+            background: linear-gradient(135deg, #1e2030, #181a2a);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .glow-green { box-shadow: 0 0 20px rgba(34, 197, 94, 0.15); }
+        .glow-red { box-shadow: 0 0 20px rgba(239, 68, 68, 0.15); }
+
+        .thought-bubble {
+            background: linear-gradient(135deg, rgba(30, 32, 48, 0.8), rgba(24, 26, 42, 0.6));
+            border: 1px solid rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+        }
+
+        .thought-trade {
+            border-left: 3px solid #22c55e;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(24, 26, 42, 0.6));
+        }
+
+        .thought-error {
+            border-left: 3px solid #ef4444;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(24, 26, 42, 0.6));
+        }
+
+        .thought-research {
+            border-left: 3px solid #a855f7;
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(24, 26, 42, 0.6));
+        }
+
+        .thought-system {
+            border-left: 3px solid #3b82f6;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(24, 26, 42, 0.6));
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #1e2030, #181a2a);
+            border: 1px solid rgba(255,255,255,0.06);
+            transition: all 0.2s ease;
+        }
+        .stat-card:hover { border-color: rgba(255,255,255,0.12); }
+
+        .holding-row {
+            transition: all 0.15s ease;
+        }
+        .holding-row:hover { background: rgba(255,255,255,0.03); }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            transition: all 0.2s ease;
+        }
+        .btn-primary:hover { 
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 1s linear infinite; }
+
+        .tab-active {
+            color: #e2e8f0;
+            border-bottom: 2px solid #3b82f6;
+        }
+        .tab-inactive {
+            color: #64748b;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-inactive:hover { color: #94a3b8; }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="app" class="flex flex-col h-screen">
+        <!-- Header -->
+        <header class="flex items-center justify-between px-6 py-3 border-b border-white/5 bg-dark-800/80 backdrop-blur-md sticky top-0 z-50">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm font-bold">
+                    🧠
+                </div>
+                <div>
+                    <h1 class="text-lg font-semibold tracking-tight">StockMind</h1>
+                    <p class="text-[10px] text-dark-300 uppercase tracking-widest">AI Investor • Research Experiment</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="market-status" class="flex items-center gap-2 text-xs">
+                    <span class="w-2 h-2 rounded-full bg-dark-400 pulse-dot"></span>
+                    <span class="text-dark-300">Loading...</span>
+                </div>
+                <div id="agent-status" class="flex items-center gap-2 text-xs text-dark-300">
+                    <span class="w-2 h-2 rounded-full bg-accent-green pulse-dot"></span>
+                    <span id="next-check-label">Agent idle</span>
+                </div>
+                <button onclick="triggerCycle()" class="btn-primary px-3 py-1.5 rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    Think Now
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Left Panel: Thought Stream -->
+            <div class="flex-1 flex flex-col min-w-0">
+                <!-- Stats Bar -->
+                <div class="grid grid-cols-4 gap-3 p-4 pb-2">
+                    <div class="stat-card rounded-xl p-3">
+                        <p class="text-[10px] uppercase tracking-wider text-dark-300 mb-1">Portfolio Value</p>
+                        <p id="stat-total" class="text-xl font-semibold font-mono">$100,000.00</p>
+                    </div>
+                    <div class="stat-card rounded-xl p-3">
+                        <p class="text-[10px] uppercase tracking-wider text-dark-300 mb-1">Cash</p>
+                        <p id="stat-cash" class="text-xl font-semibold font-mono text-accent-cyan">$100,000.00</p>
+                    </div>
+                    <div class="stat-card rounded-xl p-3">
+                        <p class="text-[10px] uppercase tracking-wider text-dark-300 mb-1">Total P&L</p>
+                        <p id="stat-pnl" class="text-xl font-semibold font-mono">$0.00</p>
+                    </div>
+                    <div class="stat-card rounded-xl p-3">
+                        <p class="text-[10px] uppercase tracking-wider text-dark-300 mb-1">Total Trades</p>
+                        <p id="stat-trades" class="text-xl font-semibold font-mono text-accent-purple">0</p>
+                    </div>
+                </div>
+
+                <!-- Thought Stream -->
+                <div class="flex-1 overflow-hidden flex flex-col px-4 pb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-sm font-medium text-dark-200 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                            StockMind's Thoughts
+                        </h2>
+                        <span class="text-[10px] text-dark-400" id="thought-count">0 thoughts</span>
+                    </div>
+                    <div id="thought-stream" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                        <div class="flex items-center justify-center h-32 text-dark-400 text-sm">
+                            <div class="text-center">
+                                <div class="text-2xl mb-2">🧠</div>
+                                <p>StockMind is waking up...</p>
+                                <p class="text-xs text-dark-500 mt-1">Thoughts will appear here as the AI thinks</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Portfolio & Info -->
+            <div class="w-[380px] border-l border-white/5 flex flex-col bg-dark-800/30 overflow-hidden">
+                <!-- Tabs -->
+                <div class="flex border-b border-white/5 px-4">
+                    <button onclick="switchTab('portfolio')" id="tab-portfolio" class="tab-active px-3 py-2.5 text-xs font-medium">
+                        Portfolio
+                    </button>
+                    <button onclick="switchTab('trades')" id="tab-trades" class="tab-inactive px-3 py-2.5 text-xs font-medium">
+                        Trades
+                    </button>
+                    <button onclick="switchTab('market')" id="tab-market" class="tab-inactive px-3 py-2.5 text-xs font-medium">
+                        Market
+                    </button>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="flex-1 overflow-y-auto">
+                    <!-- Portfolio Tab -->
+                    <div id="panel-portfolio" class="p-4">
+                        <div class="mb-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300">Holdings</h3>
+                                <span id="holdings-count" class="text-[10px] text-dark-400">0 positions</span>
+                            </div>
+                            <div id="holdings-list" class="space-y-1">
+                                <p class="text-xs text-dark-400 text-center py-6">No holdings yet.<br>The AI will start investing soon!</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3">Allocation</h3>
+                            <div id="allocation-bar" class="h-3 rounded-full bg-dark-600 overflow-hidden flex">
+                                <div class="h-full bg-accent-cyan" style="width: 100%" title="Cash"></div>
+                            </div>
+                            <div id="allocation-legend" class="flex flex-wrap gap-3 mt-2 text-[10px] text-dark-300">
+                                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accent-cyan"></span> Cash 100%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trades Tab -->
+                    <div id="panel-trades" class="p-4 hidden">
+                        <div id="trades-list" class="space-y-2">
+                            <p class="text-xs text-dark-400 text-center py-6">No trades yet.</p>
+                        </div>
+                    </div>
+
+                    <!-- Market Tab -->
+                    <div id="panel-market" class="p-4 hidden">
+                        <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3">Market Overview</h3>
+                        <div id="market-overview" class="space-y-2 mb-6">
+                            <p class="text-xs text-dark-400">Loading...</p>
+                        </div>
+
+                        <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3">Watchlist</h3>
+                        <div id="watchlist" class="space-y-1">
+                            <p class="text-xs text-dark-400">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ─── State ──────────────────────────────────────────
+        let thoughts = [];
+        let lastThoughtId = 0;
+        let currentTab = 'portfolio';
+        let eventSource = null;
+
+        // ─── Formatting Helpers ─────────────────────────────
+        function fmt(n, decimals = 2) {
+            return new Intl.NumberFormat('en-US', { 
+                minimumFractionDigits: decimals, 
+                maximumFractionDigits: decimals 
+            }).format(n);
+        }
+
+        function fmtMoney(n) {
+            const abs = Math.abs(n);
+            if (abs >= 1e12) return '$' + fmt(n / 1e12, 1) + 'T';
+            if (abs >= 1e9) return '$' + fmt(n / 1e9, 1) + 'B';
+            if (abs >= 1e6) return '$' + fmt(n / 1e6, 1) + 'M';
+            return '$' + fmt(n);
+        }
+
+        function pnlClass(n) {
+            return n >= 0 ? 'text-accent-green' : 'text-accent-red';
+        }
+
+        function pnlSign(n) {
+            return n >= 0 ? '+' : '';
+        }
+
+        function timeAgo(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+            return date.toLocaleDateString();
+        }
+
+        // ─── Tab Switching ──────────────────────────────────
+        function switchTab(tab) {
+            currentTab = tab;
+            ['portfolio', 'trades', 'market'].forEach(t => {
+                document.getElementById(`tab-${t}`).className = t === tab ? 'tab-active px-3 py-2.5 text-xs font-medium' : 'tab-inactive px-3 py-2.5 text-xs font-medium';
+                document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
+            });
+            if (tab === 'trades') loadTrades();
+            if (tab === 'market') loadMarket();
+        }
+
+        // ─── Thought Stream ─────────────────────────────────
+        function addThought(thought) {
+            const stream = document.getElementById('thought-stream');
+            
+            // Remove placeholder if present
+            if (thoughts.length === 0) {
+                stream.innerHTML = '';
+            }
+
+            const typeClass = {
+                'thinking': 'thought-bubble',
+                'trade': 'thought-trade',
+                'error': 'thought-error',
+                'research': 'thought-research',
+                'system': 'thought-system',
+            }[thought.type] || 'thought-bubble';
+
+            const typeIcon = {
+                'thinking': '💭',
+                'trade': '💰',
+                'error': '⚠️',
+                'research': '🔍',
+                'system': '⚙️',
+            }[thought.type] || '💭';
+
+            const div = document.createElement('div');
+            div.className = `${typeClass} rounded-lg px-4 py-3 thought-enter`;
+            div.innerHTML = `
+                <div class="flex items-start gap-2">
+                    <span class="text-sm mt-0.5 shrink-0">${typeIcon}</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm leading-relaxed text-dark-100">${escapeHtml(thought.content)}</p>
+                        <p class="text-[10px] text-dark-400 mt-1.5">${timeAgo(thought.created_at)}</p>
+                    </div>
+                </div>
+            `;
+
+            stream.appendChild(div);
+            thoughts.push(thought);
+
+            // Auto-scroll to bottom
+            stream.scrollTop = stream.scrollHeight;
+
+            // Update counter
+            document.getElementById('thought-count').textContent = `${thoughts.length} thoughts`;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ─── SSE Connection ─────────────────────────────────
+        function connectSSE() {
+            if (eventSource) eventSource.close();
+            
+            eventSource = new EventSource('/api/stream');
+            
+            eventSource.addEventListener('thought', (e) => {
+                const thought = JSON.parse(e.data);
+                if (thought.id > lastThoughtId) {
+                    lastThoughtId = thought.id;
+                    addThought(thought);
+                }
+            });
+
+            eventSource.onerror = () => {
+                console.log('SSE connection lost, reconnecting...');
+                setTimeout(connectSSE, 5000);
+            };
+        }
+
+        // ─── Data Loading ───────────────────────────────────
+        async function loadPortfolio() {
+            try {
+                const res = await fetch('/api/portfolio');
+                const data = await res.json();
+
+                // Update stats
+                document.getElementById('stat-total').textContent = '$' + fmt(data.total_value);
+                document.getElementById('stat-cash').textContent = '$' + fmt(data.cash);
+                
+                const pnlEl = document.getElementById('stat-pnl');
+                pnlEl.textContent = pnlSign(data.total_pnl) + '$' + fmt(Math.abs(data.total_pnl));
+                pnlEl.className = `text-xl font-semibold font-mono ${pnlClass(data.total_pnl)}`;
+
+                // Holdings
+                const list = document.getElementById('holdings-list');
+                const count = document.getElementById('holdings-count');
+
+                if (data.holdings.length === 0) {
+                    list.innerHTML = '<p class="text-xs text-dark-400 text-center py-6">No holdings yet.<br>The AI will start investing soon!</p>';
+                    count.textContent = '0 positions';
+                } else {
+                    count.textContent = `${data.holdings.length} position${data.holdings.length > 1 ? 's' : ''}`;
+                    list.innerHTML = data.holdings.map(h => `
+                        <div class="holding-row rounded-lg px-3 py-2.5 gradient-border">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-semibold text-sm">${h.symbol}</span>
+                                <span class="font-mono text-sm">${fmtMoney(h.market_value)}</span>
+                            </div>
+                            <div class="flex items-center justify-between text-[11px]">
+                                <span class="text-dark-300">${h.shares} shares @ $${fmt(h.avg_cost)}</span>
+                                <span class="${pnlClass(h.pnl)} font-mono">
+                                    ${pnlSign(h.pnl)}$${fmt(Math.abs(h.pnl))} (${pnlSign(h.pnl_pct)}${fmt(Math.abs(h.pnl_pct), 1)}%)
+                                </span>
+                            </div>
+                            <div class="flex items-center justify-between text-[10px] mt-1">
+                                <span class="text-dark-400">Now: $${fmt(h.current_price)}</span>
+                                <span class="${pnlClass(h.day_change_pct)} text-dark-300">
+                                    Today: ${pnlSign(h.day_change_pct)}${fmt(Math.abs(h.day_change_pct), 1)}%
+                                </span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                // Allocation bar
+                updateAllocation(data);
+
+            } catch (e) {
+                console.error('Portfolio load error:', e);
+            }
+        }
+
+        function updateAllocation(data) {
+            const bar = document.getElementById('allocation-bar');
+            const legend = document.getElementById('allocation-legend');
+            
+            if (data.total_value <= 0) return;
+
+            const cashPct = (data.cash / data.total_value * 100);
+            const colors = ['#f59e0b', '#a855f7', '#22c55e', '#ef4444', '#06b6d4', '#3b82f6', '#ec4899', '#84cc16'];
+            
+            let barHtml = '';
+            let legendHtml = `<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accent-cyan"></span> Cash ${fmt(cashPct, 0)}%</span>`;
+            
+            barHtml += `<div class="h-full bg-accent-cyan" style="width: ${cashPct}%"></div>`;
+            
+            data.holdings.forEach((h, i) => {
+                const pct = (h.market_value / data.total_value * 100);
+                const color = colors[i % colors.length];
+                barHtml += `<div class="h-full" style="width: ${pct}%; background: ${color}"></div>`;
+                legendHtml += `<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background: ${color}"></span> ${h.symbol} ${fmt(pct, 0)}%</span>`;
+            });
+
+            bar.innerHTML = barHtml;
+            legend.innerHTML = legendHtml;
+        }
+
+        async function loadTrades() {
+            try {
+                const res = await fetch('/api/trades');
+                const data = await res.json();
+                const list = document.getElementById('trades-list');
+                const tradeCount = document.getElementById('stat-trades');
+                
+                tradeCount.textContent = data.trades.length.toString();
+
+                if (data.trades.length === 0) {
+                    list.innerHTML = '<p class="text-xs text-dark-400 text-center py-6">No trades yet.</p>';
+                    return;
+                }
+
+                list.innerHTML = data.trades.map(t => `
+                    <div class="gradient-border rounded-lg px-3 py-2.5">
+                        <div class="flex items-center justify-between mb-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-medium px-1.5 py-0.5 rounded ${t.action === 'buy' ? 'bg-accent-green/20 text-accent-green' : 'bg-accent-red/20 text-accent-red'}">
+                                    ${t.action.toUpperCase()}
+                                </span>
+                                <span class="font-semibold text-sm">${t.symbol}</span>
+                            </div>
+                            <span class="text-[10px] text-dark-400">${timeAgo(t.created_at)}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] text-dark-300">
+                            <span>${t.shares} shares @ $${fmt(t.price)}</span>
+                            <span class="font-mono">$${fmt(t.total)}</span>
+                        </div>
+                        ${t.reasoning ? `<p class="text-[10px] text-dark-400 mt-1 italic">"${escapeHtml(t.reasoning)}"</p>` : ''}
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Trades load error:', e);
+            }
+        }
+
+        async function loadMarket() {
+            try {
+                const [marketRes, watchRes] = await Promise.all([
+                    fetch('/api/market'),
+                    fetch('/api/watchlist')
+                ]);
+                const marketData = await marketRes.json();
+                const watchData = await watchRes.json();
+
+                // Market overview
+                const overview = document.getElementById('market-overview');
+                if (marketData.overview && Object.keys(marketData.overview).length > 0) {
+                    overview.innerHTML = Object.entries(marketData.overview).map(([name, data]) => `
+                        <div class="gradient-border rounded-lg px-3 py-2 flex items-center justify-between">
+                            <span class="text-xs font-medium">${name}</span>
+                            <div class="text-right">
+                                <span class="text-xs font-mono">${fmt(data.value)}</span>
+                                <span class="text-[10px] font-mono ${pnlClass(data.change_pct)} ml-2">
+                                    ${pnlSign(data.change_pct)}${fmt(Math.abs(data.change_pct), 2)}%
+                                </span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    overview.innerHTML = '<p class="text-xs text-dark-400">Market data unavailable</p>';
+                }
+
+                // Update market status in header
+                const statusEl = document.getElementById('market-status');
+                const isOpen = marketData.market_open;
+                statusEl.innerHTML = `
+                    <span class="w-2 h-2 rounded-full ${isOpen ? 'bg-accent-green' : 'bg-accent-red'} pulse-dot"></span>
+                    <span class="text-dark-300">Market ${isOpen ? 'Open' : 'Closed'}</span>
+                `;
+
+                // Watchlist
+                const watchlist = document.getElementById('watchlist');
+                if (watchData.quotes && Object.keys(watchData.quotes).length > 0) {
+                    watchlist.innerHTML = Object.entries(watchData.quotes)
+                        .sort((a, b) => a[0].localeCompare(b[0]))
+                        .map(([sym, q]) => `
+                            <div class="gradient-border rounded-lg px-3 py-2 flex items-center justify-between holding-row">
+                                <span class="text-xs font-semibold">${sym}</span>
+                                <div class="text-right">
+                                    <span class="text-xs font-mono">$${fmt(q.price)}</span>
+                                    <span class="text-[10px] font-mono ${pnlClass(q.change_pct)} ml-2">
+                                        ${pnlSign(q.change_pct)}${fmt(Math.abs(q.change_pct), 2)}%
+                                    </span>
+                                </div>
+                            </div>
+                        `).join('');
+                } else {
+                    watchlist.innerHTML = '<p class="text-xs text-dark-400">Loading watchlist...</p>';
+                }
+            } catch (e) {
+                console.error('Market load error:', e);
+            }
+        }
+
+        async function loadInitialThoughts() {
+            try {
+                const res = await fetch('/api/thoughts?limit=50');
+                const data = await res.json();
+                if (data.thoughts && data.thoughts.length > 0) {
+                    // They come in DESC order, reverse for display
+                    const sorted = data.thoughts.reverse();
+                    document.getElementById('thought-stream').innerHTML = '';
+                    sorted.forEach(t => {
+                        lastThoughtId = Math.max(lastThoughtId, t.id);
+                        addThought(t);
+                    });
+                }
+            } catch (e) {
+                console.error('Initial thoughts load error:', e);
+            }
+        }
+
+        // ─── Actions ────────────────────────────────────────
+        async function triggerCycle() {
+            try {
+                await fetch('/api/trigger', { method: 'POST' });
+            } catch (e) {
+                console.error('Trigger error:', e);
+            }
+        }
+
+        // ─── Agent Status ───────────────────────────────────
+        async function loadStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const label = document.getElementById('next-check-label');
+
+                if (data.next_check) {
+                    const next = new Date(data.next_check);
+                    const now = new Date();
+                    const diffMin = Math.max(0, Math.round((next - now) / 60000));
+                    const session = data.next_session || 'Check-in';
+
+                    if (diffMin < 1) {
+                        label.textContent = `${session} — any moment now...`;
+                    } else if (diffMin < 60) {
+                        label.textContent = `${session} in ${diffMin}m`;
+                    } else {
+                        const hours = Math.floor(diffMin / 60);
+                        const mins = diffMin % 60;
+                        const timeStr = next.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                        label.textContent = `${session} ~${timeStr}`;
+                    }
+                } else if (data.last_cycle) {
+                    const last = new Date(data.last_cycle);
+                    label.textContent = `Last check: ${timeAgo(data.last_cycle)}`;
+                } else {
+                    label.textContent = 'Agent starting...';
+                }
+            } catch (e) {
+                console.error('Status load error:', e);
+            }
+        }
+
+        // ─── Init ───────────────────────────────────────────
+        async function init() {
+            await loadInitialThoughts();
+            await loadPortfolio();
+            await loadTrades();
+            await loadStatus();
+            connectSSE();
+
+            // Refresh portfolio every 30 seconds
+            setInterval(loadPortfolio, 30000);
+            // Refresh trades every 60 seconds
+            setInterval(loadTrades, 60000);
+            // Refresh agent status every 30 seconds
+            setInterval(loadStatus, 30000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
+
