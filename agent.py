@@ -14,8 +14,13 @@ import json
 import os
 import asyncio
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from anthropic import AsyncAnthropic
+
+# Use configured timezone so sessions run at the right local time
+# even when deployed on a UTC server like Railway
+TIMEZONE = ZoneInfo(os.getenv("TIMEZONE", "Australia/Sydney"))
 from database import (
     add_thought, get_portfolio, get_cash_balance,
     get_watchlist, add_to_watchlist, get_trades,
@@ -87,7 +92,7 @@ SESSIONS = {
 
 def get_next_session() -> tuple[str, datetime]:
     """Figure out what the next natural check-in should be."""
-    now = datetime.now()
+    now = datetime.now(TIMEZONE)
     is_weekend = now.weekday() >= 5
 
     # Build list of upcoming sessions today and tomorrow
@@ -185,7 +190,7 @@ async def think(content: str, thought_type: str = "thinking", metadata: dict = N
 async def run_agent_cycle(session_id: str = "morning_coffee"):
     """Run one cycle of the AI agent's thinking process."""
     global _last_cycle_time, _current_session
-    _last_cycle_time = datetime.now()
+    _last_cycle_time = datetime.now(TIMEZONE)
     _current_session = session_id
 
     session = SESSIONS.get(session_id, SESSIONS["morning_coffee"])
@@ -266,7 +271,7 @@ def build_context(portfolio: dict, quotes: dict, market_overview: dict,
                   recent_trades: list, watchlist: list, session: dict,
                   memories: list, history: dict) -> str:
     """Build the context message for the LLM."""
-    now = datetime.now()
+    now = datetime.now(TIMEZONE)
     market_open = is_market_hours()
 
     ctx = f"""=== {session['name'].upper()} — {now.strftime('%A, %B %d %Y, %I:%M %p')} ===
@@ -541,7 +546,7 @@ async def start_agent_loop(interval_minutes: int = 15):
         )
 
     # Run first cycle immediately
-    now = datetime.now()
+    now = datetime.now(TIMEZONE)
     is_weekend = now.weekday() >= 5
     hour = now.hour
 
@@ -565,7 +570,7 @@ async def start_agent_loop(interval_minutes: int = 15):
         _next_check_time = next_time
 
         # Calculate wait time
-        wait_seconds = max(0, (next_time - datetime.now()).total_seconds())
+        wait_seconds = max(0, (next_time - datetime.now(TIMEZONE)).total_seconds())
 
         session_name = SESSIONS[session_id]["name"]
         time_str = next_time.strftime('%I:%M %p')
@@ -591,7 +596,7 @@ def stop_agent():
 
 async def trigger_cycle():
     """Manually trigger a thinking cycle (for the UI button)."""
-    now = datetime.now()
+    now = datetime.now(TIMEZONE)
     is_weekend = now.weekday() >= 5
     hour = now.hour
 

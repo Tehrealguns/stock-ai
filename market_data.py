@@ -189,10 +189,16 @@ async def fetch_market_overview() -> dict:
 
 
 def is_market_hours() -> bool:
-    """Check if US market is currently open (rough check)."""
-    now = datetime.now()
+    """Check if US market is currently open (uses US Eastern time)."""
+    from zoneinfo import ZoneInfo
+    et = ZoneInfo("America/New_York")
+    now = datetime.now(et)
     # Market hours: Mon-Fri, 9:30 AM - 4:00 PM ET
     if now.weekday() >= 5:  # Weekend
         return False
-    hour = now.hour
-    return 9 <= hour <= 16
+    # 9:30 to 16:00 ET
+    if now.hour < 9 or now.hour >= 16:
+        return False
+    if now.hour == 9 and now.minute < 30:
+        return False
+    return True
