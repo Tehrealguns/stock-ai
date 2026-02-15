@@ -18,8 +18,22 @@ async def get_db():
     return db
 
 
+async def reset_db():
+    """Delete and recreate the database from scratch."""
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+        print(f"🗑️ Deleted old database at {DB_PATH}")
+    await init_db()
+
+
 async def init_db():
     """Initialize database tables."""
+    # Check if we should force a fresh start
+    if os.getenv("FRESH_START", "").lower() in ("true", "1", "yes"):
+        if DB_PATH.exists():
+            DB_PATH.unlink()
+            print(f"🗑️ FRESH_START: Deleted old database at {DB_PATH}")
+
     db = await get_db()
     try:
         await db.executescript("""

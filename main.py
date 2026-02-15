@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from database import init_db, get_thoughts, get_trades, get_watchlist, add_to_watchlist, get_cash_balance
+from database import init_db, reset_db, get_thoughts, get_trades, get_watchlist, add_to_watchlist, get_cash_balance
 from trading import get_portfolio_summary
 from market_data import fetch_quotes, fetch_market_overview, is_market_hours
 from agent import start_agent_loop, stop_agent, trigger_cycle
@@ -130,6 +130,17 @@ async def api_trigger():
     try:
         asyncio.create_task(trigger_cycle())
         return JSONResponse(content={"status": "triggered"})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.post("/api/reset")
+async def api_reset():
+    """Reset the database — fresh start with $100k."""
+    try:
+        stop_agent()
+        await reset_db()
+        return JSONResponse(content={"status": "reset", "message": "Database wiped. Restart the service to begin fresh."})
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
