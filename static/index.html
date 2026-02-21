@@ -491,7 +491,7 @@
         }
 
         // ─── Thought Stream ─────────────────────────────────
-        function addThought(thought) {
+        function addThought(thought, skipAnimation = false) {
             const stream = document.getElementById('thought-stream');
             if (thoughts.length === 0) stream.innerHTML = '';
 
@@ -507,7 +507,7 @@
             }[thought.type] || '💭';
 
             const div = document.createElement('div');
-            div.className = `${typeClass} rounded-lg px-3 md:px-4 py-2.5 md:py-3 thought-enter`;
+            div.className = `${typeClass} rounded-lg px-3 md:px-4 py-2.5 md:py-3${skipAnimation ? '' : ' thought-enter'}`;
             div.innerHTML = `
                 <div class="flex items-start gap-2">
                     <span class="text-sm mt-0.5 shrink-0">${typeIcon}</span>
@@ -931,14 +931,14 @@
 
         async function loadInitialThoughts() {
             try {
-                const res = await fetch('/api/thoughts?limit=50');
+                const res = await fetch('/api/thoughts?limit=30');
                 const data = await res.json();
                 if (data.thoughts && data.thoughts.length > 0) {
                     const sorted = data.thoughts.reverse();
                     document.getElementById('thought-stream').innerHTML = '';
                     sorted.forEach(t => {
                         lastThoughtId = Math.max(lastThoughtId, t.id);
-                        addThought(t);
+                        addThought(t, true);
                     });
                 }
             } catch (e) {
