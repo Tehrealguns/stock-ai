@@ -395,14 +395,27 @@ Market Status: {"OPEN 🟢" if market_open else "CLOSED 🔴"}
         ctx += "\n"
 
     profile = RISK_PROFILES.get(risk_profile, RISK_PROFILES["moderate"])
+    max_per_stock = portfolio['total_value'] * profile['max_position_pct'] / 100
+    min_cash = portfolio['total_value'] * profile['min_cash_pct'] / 100
+    spendable = max(0, portfolio['cash'] - min_cash)
+
     ctx += f"""=== RISK PROFILE: {risk_profile.upper()} ===
 {profile['rules_summary']}
+
+=== ORDER SIZING GUIDE ===
+Total portfolio: ${portfolio['total_value']:,.2f}
+Max per stock: ${max_per_stock:,.2f} ({profile['max_position_pct']}%)
+Min cash reserve: ${min_cash:,.2f} ({profile['min_cash_pct']}%)
+Available to invest (after cash reserve): ${spendable:,.2f}
+IMPORTANT: When buying, make sure the order total stays under ${spendable:,.2f} AND the position stays under ${max_per_stock:,.2f}. If you exceed these, the order WILL be rejected. Size your orders carefully!
 
 === SESSION: {session['name']} ===
 {session['prompt_flavor']}
 
 Remember:
 - {profile['rules_summary']}
+- Size orders to fit within limits above — rejected orders waste a session.
+- You can reinvest dividends and profits freely.
 - It's totally fine to just observe and do nothing. Patience pays.
 - You can save notes/lessons to your memory with the "remember" action.
 - {"Market is CLOSED — focus on research and planning." if not market_open else "Market is OPEN — you can trade if you see a real opportunity."}
