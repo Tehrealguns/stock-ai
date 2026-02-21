@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StockMind — AI Investor</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
@@ -102,9 +103,7 @@
         }
         .stat-card:hover { border-color: rgba(255,255,255,0.12); }
 
-        .holding-row {
-            transition: all 0.15s ease;
-        }
+        .holding-row { transition: all 0.15s ease; }
         .holding-row:hover { background: rgba(255,255,255,0.03); }
 
         .btn-primary {
@@ -119,74 +118,97 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         .spinner { animation: spin 1s linear infinite; }
 
-        .tab-active {
-            color: #e2e8f0;
-            border-bottom: 2px solid #3b82f6;
-        }
-        .tab-inactive {
-            color: #64748b;
-            border-bottom: 2px solid transparent;
-        }
+        .tab-active { color: #e2e8f0; border-bottom: 2px solid #3b82f6; }
+        .tab-inactive { color: #64748b; border-bottom: 2px solid transparent; }
         .tab-inactive:hover { color: #94a3b8; }
+
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+
+        .profile-card {
+            border: 2px solid rgba(255,255,255,0.06);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .profile-card:hover { border-color: rgba(255,255,255,0.15); }
+        .profile-card.active { border-color: #3b82f6; box-shadow: 0 0 20px rgba(59, 130, 246, 0.2); }
+
+        .mobile-nav-btn { transition: color 0.15s ease; }
+        .mobile-nav-btn.active { color: #3b82f6; }
+        .safe-bottom { padding-bottom: max(0.375rem, env(safe-area-inset-bottom)); }
+
+        @media (max-width: 767px) {
+            .desktop-only { display: none !important; }
+            #app { height: 100dvh; }
+        }
+        @media (min-width: 768px) {
+            .mobile-only { display: none !important; }
+        }
     </style>
 </head>
 <body class="min-h-screen">
     <div id="app" class="flex flex-col h-screen">
         <!-- Header -->
-        <header class="flex items-center justify-between px-6 py-3 border-b border-white/5 bg-dark-800/80 backdrop-blur-md sticky top-0 z-50">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm font-bold">
+        <header class="flex items-center justify-between px-3 md:px-6 py-2 md:py-3 border-b border-white/5 bg-dark-800/80 backdrop-blur-md sticky top-0 z-50">
+            <div class="flex items-center gap-2 md:gap-3">
+                <div class="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm font-bold shrink-0">
                     🧠
                 </div>
                 <div>
-                    <h1 class="text-lg font-semibold tracking-tight">StockMind</h1>
-                    <p class="text-[10px] text-dark-300 uppercase tracking-widest">AI Investor • Research Experiment</p>
+                    <h1 class="text-base md:text-lg font-semibold tracking-tight">StockMind</h1>
+                    <p class="text-[9px] md:text-[10px] text-dark-300 uppercase tracking-widest hidden sm:block">AI Investor • Research Experiment</p>
                 </div>
             </div>
-            <div class="flex items-center gap-4">
-                <div id="market-status" class="flex items-center gap-2 text-xs">
+            <div class="flex items-center gap-2 md:gap-4">
+                <div id="market-status" class="flex items-center gap-1.5 md:gap-2 text-[10px] md:text-xs">
                     <span class="w-2 h-2 rounded-full bg-dark-400 pulse-dot"></span>
-                    <span class="text-dark-300">Loading...</span>
+                    <span class="text-dark-300 hidden sm:inline">Loading...</span>
                 </div>
-                <div id="agent-status" class="flex items-center gap-2 text-xs text-dark-300">
+                <div id="risk-badge" class="flex items-center gap-1 md:gap-1.5 text-[10px] md:text-xs px-1.5 md:px-2 py-1 rounded-md bg-dark-600 cursor-pointer" onclick="openSettings()">
+                    <span id="risk-badge-icon">⚖️</span>
+                    <span id="risk-badge-label" class="text-dark-200 font-medium hidden sm:inline">Moderate</span>
+                </div>
+                <div id="agent-status" class="items-center gap-2 text-xs text-dark-300 hidden md:flex desktop-only">
                     <span class="w-2 h-2 rounded-full bg-accent-green pulse-dot"></span>
                     <span id="next-check-label">Agent idle</span>
                 </div>
-                <button onclick="triggerCycle()" class="btn-primary px-3 py-1.5 rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                    Think Now
+                <button onclick="openSettings()" class="p-1.5 rounded-lg hover:bg-dark-600 transition-colors text-dark-300 hover:text-dark-100 hidden md:block desktop-only" title="Settings">
+                    <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 </button>
             </div>
         </header>
 
         <!-- Main Content -->
-        <div class="flex-1 flex overflow-hidden">
-            <!-- Left Panel: Thought Stream -->
-            <div class="flex-1 flex flex-col min-w-0">
+        <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+            <!-- Left Panel: Stats + Thought Stream -->
+            <div id="mobile-panel-thoughts" class="flex-1 flex flex-col min-w-0">
                 <!-- Stats Bar -->
-                <div class="grid grid-cols-4 gap-3 p-4 pb-2">
-                    <div class="stat-card rounded-xl p-3">
-                        <p class="text-[10px] uppercase tracking-wider text-dark-300 mb-1">Portfolio Value</p>
-                        <p id="stat-total" class="text-xl font-semibold font-mono">$100,000.00</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 p-3 md:p-4 pb-2">
+                    <div class="stat-card rounded-xl p-2.5 md:p-3">
+                        <p class="text-[9px] md:text-[10px] uppercase tracking-wider text-dark-300 mb-0.5 md:mb-1">Portfolio Value</p>
+                        <p id="stat-total" class="text-base md:text-xl font-semibold font-mono">$100,000.00</p>
+                        <div class="mt-1 h-6 md:h-8"><canvas id="sparkline-chart"></canvas></div>
                     </div>
-                    <div class="stat-card rounded-xl p-3">
-                        <p class="text-[10px] uppercase tracking-wider text-dark-300 mb-1">Cash</p>
-                        <p id="stat-cash" class="text-xl font-semibold font-mono text-accent-cyan">$100,000.00</p>
+                    <div class="stat-card rounded-xl p-2.5 md:p-3">
+                        <p class="text-[9px] md:text-[10px] uppercase tracking-wider text-dark-300 mb-0.5 md:mb-1">Cash</p>
+                        <p id="stat-cash" class="text-base md:text-xl font-semibold font-mono text-accent-cyan">$100,000.00</p>
                     </div>
-                    <div class="stat-card rounded-xl p-3">
-                        <p class="text-[10px] uppercase tracking-wider text-dark-300 mb-1">Total P&L</p>
-                        <p id="stat-pnl" class="text-xl font-semibold font-mono">$0.00</p>
+                    <div class="stat-card rounded-xl p-2.5 md:p-3">
+                        <p class="text-[9px] md:text-[10px] uppercase tracking-wider text-dark-300 mb-0.5 md:mb-1">Total P&L</p>
+                        <p id="stat-pnl" class="text-base md:text-xl font-semibold font-mono">$0.00</p>
                     </div>
-                    <div class="stat-card rounded-xl p-3">
-                        <p class="text-[10px] uppercase tracking-wider text-dark-300 mb-1">Total Trades</p>
-                        <p id="stat-trades" class="text-xl font-semibold font-mono text-accent-purple">0</p>
+                    <div class="stat-card rounded-xl p-2.5 md:p-3">
+                        <p class="text-[9px] md:text-[10px] uppercase tracking-wider text-dark-300 mb-0.5 md:mb-1">Total Trades</p>
+                        <p id="stat-trades" class="text-base md:text-xl font-semibold font-mono text-accent-purple">0</p>
                     </div>
                 </div>
 
                 <!-- Thought Stream -->
-                <div class="flex-1 overflow-hidden flex flex-col px-4 pb-4">
+                <div class="flex-1 overflow-hidden flex flex-col px-3 md:px-4 pb-2 md:pb-4">
                     <div class="flex items-center justify-between mb-2">
-                        <h2 class="text-sm font-medium text-dark-200 flex items-center gap-2">
+                        <h2 class="text-xs md:text-sm font-medium text-dark-200 flex items-center gap-2">
                             <svg class="w-4 h-4 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                             StockMind's Thoughts
                         </h2>
@@ -204,17 +226,20 @@
                 </div>
             </div>
 
-            <!-- Right Panel: Portfolio & Info -->
-            <div class="w-[380px] border-l border-white/5 flex flex-col bg-dark-800/30 overflow-hidden">
+            <!-- Right Panel: Portfolio & Info (hidden on mobile, shown via bottom nav) -->
+            <div id="mobile-panel-data" class="hidden md:flex w-full md:w-[420px] border-t md:border-t-0 md:border-l border-white/5 flex-col bg-dark-800/30 overflow-hidden">
                 <!-- Tabs -->
-                <div class="flex border-b border-white/5 px-4">
-                    <button onclick="switchTab('portfolio')" id="tab-portfolio" class="tab-active px-3 py-2.5 text-xs font-medium">
+                <div class="flex border-b border-white/5 px-3 md:px-4 overflow-x-auto">
+                    <button onclick="switchTab('portfolio')" id="tab-portfolio" class="tab-active px-2.5 md:px-3 py-2.5 text-[11px] md:text-xs font-medium whitespace-nowrap">
                         Portfolio
                     </button>
-                    <button onclick="switchTab('trades')" id="tab-trades" class="tab-inactive px-3 py-2.5 text-xs font-medium">
+                    <button onclick="switchTab('performance')" id="tab-performance" class="tab-inactive px-2.5 md:px-3 py-2.5 text-[11px] md:text-xs font-medium whitespace-nowrap">
+                        Performance
+                    </button>
+                    <button onclick="switchTab('trades')" id="tab-trades" class="tab-inactive px-2.5 md:px-3 py-2.5 text-[11px] md:text-xs font-medium whitespace-nowrap">
                         Trades
                     </button>
-                    <button onclick="switchTab('market')" id="tab-market" class="tab-inactive px-3 py-2.5 text-xs font-medium">
+                    <button onclick="switchTab('market')" id="tab-market" class="tab-inactive px-2.5 md:px-3 py-2.5 text-[11px] md:text-xs font-medium whitespace-nowrap">
                         Market
                     </button>
                 </div>
@@ -222,7 +247,7 @@
                 <!-- Tab Content -->
                 <div class="flex-1 overflow-y-auto">
                     <!-- Portfolio Tab -->
-                    <div id="panel-portfolio" class="p-4">
+                    <div id="panel-portfolio" class="p-3 md:p-4">
                         <div class="mb-4">
                             <div class="flex items-center justify-between mb-3">
                                 <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300">Holdings</h3>
@@ -235,24 +260,37 @@
 
                         <div>
                             <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3">Allocation</h3>
-                            <div id="allocation-bar" class="h-3 rounded-full bg-dark-600 overflow-hidden flex">
-                                <div class="h-full bg-accent-cyan" style="width: 100%" title="Cash"></div>
+                            <div class="flex justify-center mb-3">
+                                <div class="w-40 h-40 md:w-48 md:h-48"><canvas id="allocation-donut"></canvas></div>
                             </div>
-                            <div id="allocation-legend" class="flex flex-wrap gap-3 mt-2 text-[10px] text-dark-300">
+                            <div id="allocation-legend" class="flex flex-wrap gap-2 md:gap-3 text-[10px] text-dark-300">
                                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accent-cyan"></span> Cash 100%</span>
                             </div>
                         </div>
                     </div>
 
+                    <!-- Performance Tab -->
+                    <div id="panel-performance" class="p-3 md:p-4 hidden">
+                        <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3">Portfolio Value Over Time</h3>
+                        <div class="gradient-border rounded-xl p-2 md:p-3 mb-4">
+                            <canvas id="portfolio-value-chart" height="200"></canvas>
+                        </div>
+
+                        <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3">P&L Over Time</h3>
+                        <div class="gradient-border rounded-xl p-2 md:p-3">
+                            <canvas id="pnl-chart" height="180"></canvas>
+                        </div>
+                    </div>
+
                     <!-- Trades Tab -->
-                    <div id="panel-trades" class="p-4 hidden">
+                    <div id="panel-trades" class="p-3 md:p-4 hidden">
                         <div id="trades-list" class="space-y-2">
                             <p class="text-xs text-dark-400 text-center py-6">No trades yet.</p>
                         </div>
                     </div>
 
                     <!-- Market Tab -->
-                    <div id="panel-market" class="p-4 hidden">
+                    <div id="panel-market" class="p-3 md:p-4 hidden">
                         <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3">Market Overview</h3>
                         <div id="market-overview" class="space-y-2 mb-6">
                             <p class="text-xs text-dark-400">Loading...</p>
@@ -266,6 +304,83 @@
                 </div>
             </div>
         </div>
+
+        <!-- Mobile Bottom Navigation -->
+        <nav class="mobile-only flex items-center justify-around border-t border-white/5 bg-dark-800/90 backdrop-blur-md px-2 py-1.5 safe-bottom">
+            <button onclick="switchMobilePanel('thoughts')" id="mobile-nav-thoughts" class="mobile-nav-btn active flex flex-col items-center gap-0.5 px-3 py-1 text-dark-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                <span class="text-[9px] font-medium">Thoughts</span>
+            </button>
+            <button onclick="switchMobilePanel('data'); switchTab('portfolio')" id="mobile-nav-portfolio" class="mobile-nav-btn flex flex-col items-center gap-0.5 px-3 py-1 text-dark-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                <span class="text-[9px] font-medium">Portfolio</span>
+            </button>
+            <button onclick="switchMobilePanel('data'); switchTab('performance')" id="mobile-nav-charts" class="mobile-nav-btn flex flex-col items-center gap-0.5 px-3 py-1 text-dark-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                <span class="text-[9px] font-medium">Charts</span>
+            </button>
+            <button onclick="switchMobilePanel('data'); switchTab('market')" id="mobile-nav-market" class="mobile-nav-btn flex flex-col items-center gap-0.5 px-3 py-1 text-dark-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                <span class="text-[9px] font-medium">Market</span>
+            </button>
+            <button onclick="openSettings()" id="mobile-nav-settings" class="mobile-nav-btn flex flex-col items-center gap-0.5 px-3 py-1 text-dark-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span class="text-[9px] font-medium">Settings</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-[100] hidden">
+        <div class="modal-overlay absolute inset-0" onclick="closeSettings()"></div>
+        <div class="absolute inset-0 flex items-end md:items-center justify-center md:p-8 pointer-events-none">
+            <div class="gradient-border rounded-t-2xl md:rounded-2xl w-full max-w-lg pointer-events-auto max-h-[85vh] overflow-y-auto" style="background: #12141f;">
+                <div class="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-white/5 sticky top-0 z-10" style="background: #12141f;">
+                    <h2 class="text-sm md:text-base font-semibold">Settings</h2>
+                    <button onclick="closeSettings()" class="text-dark-400 hover:text-dark-100 transition-colors p-1">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <div class="p-4 md:p-6">
+                    <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3 md:mb-4">Risk Profile</h3>
+                    <div class="grid grid-cols-3 gap-2 md:gap-3 mb-4 md:mb-6">
+                        <div onclick="setRiskProfile('safe')" id="profile-safe" class="profile-card rounded-xl p-3 md:p-4 gradient-border">
+                            <div class="text-xl md:text-2xl mb-1 md:mb-2">🛡️</div>
+                            <h4 class="text-xs md:text-sm font-semibold mb-0.5 md:mb-1">Safe</h4>
+                            <p class="text-[9px] md:text-[10px] text-dark-300 leading-relaxed">Capital preservation. Blue-chip, low volatility.</p>
+                        </div>
+                        <div onclick="setRiskProfile('moderate')" id="profile-moderate" class="profile-card rounded-xl p-3 md:p-4 gradient-border">
+                            <div class="text-xl md:text-2xl mb-1 md:mb-2">⚖️</div>
+                            <h4 class="text-xs md:text-sm font-semibold mb-0.5 md:mb-1">Moderate</h4>
+                            <p class="text-[9px] md:text-[10px] text-dark-300 leading-relaxed">Balanced growth. Value and momentum mix.</p>
+                        </div>
+                        <div onclick="setRiskProfile('aggressive')" id="profile-aggressive" class="profile-card rounded-xl p-3 md:p-4 gradient-border">
+                            <div class="text-xl md:text-2xl mb-1 md:mb-2">🔥</div>
+                            <h4 class="text-xs md:text-sm font-semibold mb-0.5 md:mb-1">Aggressive</h4>
+                            <p class="text-[9px] md:text-[10px] text-dark-300 leading-relaxed">High growth. Concentrated bets, momentum.</p>
+                        </div>
+                    </div>
+
+                    <div id="profile-details" class="gradient-border rounded-xl p-3 md:p-4">
+                        <h4 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-2 md:mb-3">Active Limits</h4>
+                        <div class="grid grid-cols-3 gap-3 md:gap-4 text-center">
+                            <div>
+                                <p id="limit-position" class="text-base md:text-lg font-semibold font-mono text-accent-blue">20%</p>
+                                <p class="text-[9px] md:text-[10px] text-dark-400 mt-0.5">Max Per Stock</p>
+                            </div>
+                            <div>
+                                <p id="limit-cash" class="text-base md:text-lg font-semibold font-mono text-accent-cyan">15%</p>
+                                <p class="text-[9px] md:text-[10px] text-dark-400 mt-0.5">Min Cash</p>
+                            </div>
+                            <div>
+                                <p id="limit-holdings" class="text-base md:text-lg font-semibold font-mono text-accent-purple">10</p>
+                                <p class="text-[9px] md:text-[10px] text-dark-400 mt-0.5">Max Holdings</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -274,6 +389,11 @@
         let lastThoughtId = 0;
         let currentTab = 'portfolio';
         let eventSource = null;
+        let currentRiskProfile = 'moderate';
+        let sparklineChart = null;
+        let portfolioValueChart = null;
+        let pnlChart = null;
+        let allocationDonut = null;
 
         // ─── Formatting Helpers ─────────────────────────────
         function fmt(n, decimals = 2) {
@@ -291,13 +411,8 @@
             return '$' + fmt(n);
         }
 
-        function pnlClass(n) {
-            return n >= 0 ? 'text-accent-green' : 'text-accent-red';
-        }
-
-        function pnlSign(n) {
-            return n >= 0 ? '+' : '';
-        }
+        function pnlClass(n) { return n >= 0 ? 'text-accent-green' : 'text-accent-red'; }
+        function pnlSign(n) { return n >= 0 ? '+' : ''; }
 
         function timeAgo(dateStr) {
             const date = new Date(dateStr);
@@ -309,44 +424,88 @@
             return date.toLocaleDateString();
         }
 
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ─── Chart.js Defaults ──────────────────────────────
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.font.size = 10;
+
+        // ─── Mobile Panel Switching ─────────────────────────
+        let currentMobilePanel = 'thoughts';
+
+        function switchMobilePanel(panel) {
+            currentMobilePanel = panel;
+            const thoughtsPanel = document.getElementById('mobile-panel-thoughts');
+            const dataPanel = document.getElementById('mobile-panel-data');
+
+            if (panel === 'thoughts') {
+                thoughtsPanel.classList.remove('hidden');
+                thoughtsPanel.classList.add('flex');
+                dataPanel.classList.add('hidden');
+                dataPanel.classList.remove('flex');
+            } else {
+                thoughtsPanel.classList.add('hidden');
+                thoughtsPanel.classList.remove('flex');
+                dataPanel.classList.remove('hidden');
+                dataPanel.classList.add('flex');
+            }
+
+            // Update bottom nav active states
+            document.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
+            if (panel === 'thoughts') {
+                document.getElementById('mobile-nav-thoughts').classList.add('active');
+            } else {
+                const navMap = { portfolio: 'mobile-nav-portfolio', performance: 'mobile-nav-charts', trades: 'mobile-nav-portfolio', market: 'mobile-nav-market' };
+                const activeNav = document.getElementById(navMap[currentTab] || 'mobile-nav-portfolio');
+                if (activeNav) activeNav.classList.add('active');
+            }
+        }
+
         // ─── Tab Switching ──────────────────────────────────
         function switchTab(tab) {
             currentTab = tab;
-            ['portfolio', 'trades', 'market'].forEach(t => {
-                document.getElementById(`tab-${t}`).className = t === tab ? 'tab-active px-3 py-2.5 text-xs font-medium' : 'tab-inactive px-3 py-2.5 text-xs font-medium';
+            ['portfolio', 'performance', 'trades', 'market'].forEach(t => {
+                const tabBtn = document.getElementById(`tab-${t}`);
+                tabBtn.className = t === tab
+                    ? 'tab-active px-2.5 md:px-3 py-2.5 text-[11px] md:text-xs font-medium whitespace-nowrap'
+                    : 'tab-inactive px-2.5 md:px-3 py-2.5 text-[11px] md:text-xs font-medium whitespace-nowrap';
                 document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
             });
             if (tab === 'trades') loadTrades();
             if (tab === 'market') loadMarket();
+            if (tab === 'performance') loadPerformanceCharts();
+
+            // Update mobile nav highlight
+            document.querySelectorAll('.mobile-nav-btn').forEach(btn => btn.classList.remove('active'));
+            const navMap = { portfolio: 'mobile-nav-portfolio', performance: 'mobile-nav-charts', trades: 'mobile-nav-portfolio', market: 'mobile-nav-market' };
+            const activeNav = document.getElementById(navMap[tab] || 'mobile-nav-portfolio');
+            if (activeNav) activeNav.classList.add('active');
         }
 
         // ─── Thought Stream ─────────────────────────────────
         function addThought(thought) {
             const stream = document.getElementById('thought-stream');
-            
-            // Remove placeholder if present
-            if (thoughts.length === 0) {
-                stream.innerHTML = '';
-            }
+            if (thoughts.length === 0) stream.innerHTML = '';
 
             const typeClass = {
-                'thinking': 'thought-bubble',
-                'trade': 'thought-trade',
-                'error': 'thought-error',
-                'research': 'thought-research',
+                'thinking': 'thought-bubble', 'trade': 'thought-trade',
+                'error': 'thought-error', 'research': 'thought-research',
                 'system': 'thought-system',
             }[thought.type] || 'thought-bubble';
 
             const typeIcon = {
-                'thinking': '💭',
-                'trade': '💰',
-                'error': '⚠️',
-                'research': '🔍',
-                'system': '⚙️',
+                'thinking': '💭', 'trade': '💰', 'error': '⚠️',
+                'research': '🔍', 'system': '⚙️',
             }[thought.type] || '💭';
 
             const div = document.createElement('div');
-            div.className = `${typeClass} rounded-lg px-4 py-3 thought-enter`;
+            div.className = `${typeClass} rounded-lg px-3 md:px-4 py-2.5 md:py-3 thought-enter`;
             div.innerHTML = `
                 <div class="flex items-start gap-2">
                     <span class="text-sm mt-0.5 shrink-0">${typeIcon}</span>
@@ -356,29 +515,16 @@
                     </div>
                 </div>
             `;
-
             stream.appendChild(div);
             thoughts.push(thought);
-
-            // Auto-scroll to bottom
             stream.scrollTop = stream.scrollHeight;
-
-            // Update counter
             document.getElementById('thought-count').textContent = `${thoughts.length} thoughts`;
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
         }
 
         // ─── SSE Connection ─────────────────────────────────
         function connectSSE() {
             if (eventSource) eventSource.close();
-            
             eventSource = new EventSource('/api/stream');
-            
             eventSource.addEventListener('thought', (e) => {
                 const thought = JSON.parse(e.data);
                 if (thought.id > lastThoughtId) {
@@ -386,11 +532,196 @@
                     addThought(thought);
                 }
             });
-
             eventSource.onerror = () => {
                 console.log('SSE connection lost, reconnecting...');
                 setTimeout(connectSSE, 5000);
             };
+        }
+
+        // ─── Sparkline ──────────────────────────────────────
+        function updateSparkline(snapshots) {
+            const ctx = document.getElementById('sparkline-chart').getContext('2d');
+            if (sparklineChart) sparklineChart.destroy();
+            if (!snapshots || snapshots.length < 2) return;
+
+            const values = snapshots.map(s => s.total_value);
+            const trend = values[values.length - 1] >= values[0];
+
+            sparklineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: snapshots.map(() => ''),
+                    datasets: [{
+                        data: values,
+                        borderColor: trend ? '#22c55e' : '#ef4444',
+                        backgroundColor: trend ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                        borderWidth: 1.5,
+                        fill: true,
+                        pointRadius: 0,
+                        tension: 0.4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false },
+                    },
+                }
+            });
+        }
+
+        // ─── Performance Charts ─────────────────────────────
+        async function loadPerformanceCharts() {
+            try {
+                const res = await fetch('/api/portfolio/history?days=30');
+                const data = await res.json();
+                const snapshots = data.snapshots || [];
+
+                renderPortfolioValueChart(snapshots);
+                renderPnlChart(snapshots);
+            } catch (e) {
+                console.error('Performance chart error:', e);
+            }
+        }
+
+        function renderPortfolioValueChart(snapshots) {
+            const ctx = document.getElementById('portfolio-value-chart').getContext('2d');
+            if (portfolioValueChart) portfolioValueChart.destroy();
+
+            if (snapshots.length === 0) {
+                portfolioValueChart = null;
+                return;
+            }
+
+            const labels = snapshots.map(s => {
+                const d = new Date(s.created_at);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            });
+            const values = snapshots.map(s => s.total_value);
+            const startingBalance = 100000;
+
+            portfolioValueChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Portfolio Value',
+                            data: values,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59,130,246,0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            pointRadius: snapshots.length > 30 ? 0 : 3,
+                            pointBackgroundColor: '#3b82f6',
+                            tension: 0.3,
+                        },
+                        {
+                            label: 'Starting Balance',
+                            data: values.map(() => startingBalance),
+                            borderColor: 'rgba(148,163,184,0.3)',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: true, position: 'top', labels: { boxWidth: 12, padding: 15, font: { size: 10 } } },
+                        tooltip: {
+                            backgroundColor: '#1e2030',
+                            titleColor: '#e2e8f0',
+                            bodyColor: '#94a3b8',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                label: ctx => ctx.dataset.label + ': $' + fmt(ctx.parsed.y),
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { maxTicksLimit: 8, font: { size: 9 } },
+                            grid: { display: false },
+                        },
+                        y: {
+                            ticks: {
+                                callback: v => '$' + (v >= 1000 ? fmt(v/1000, 1) + 'k' : fmt(v, 0)),
+                                font: { size: 9 },
+                            },
+                            grid: { color: 'rgba(255,255,255,0.03)' },
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderPnlChart(snapshots) {
+            const ctx = document.getElementById('pnl-chart').getContext('2d');
+            if (pnlChart) pnlChart.destroy();
+
+            if (snapshots.length === 0) { pnlChart = null; return; }
+
+            const labels = snapshots.map(s => {
+                const d = new Date(s.created_at);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            });
+            const pnlValues = snapshots.map(s => s.pnl);
+            const colors = pnlValues.map(v => v >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)');
+
+            pnlChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'P&L',
+                        data: pnlValues,
+                        backgroundColor: colors,
+                        borderRadius: 3,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1e2030',
+                            titleColor: '#e2e8f0',
+                            bodyColor: '#94a3b8',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                label: ctx => 'P&L: ' + (ctx.parsed.y >= 0 ? '+' : '') + '$' + fmt(ctx.parsed.y),
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { maxTicksLimit: 8, font: { size: 9 } },
+                            grid: { display: false },
+                        },
+                        y: {
+                            ticks: {
+                                callback: v => (v >= 0 ? '+' : '') + '$' + fmt(v, 0),
+                                font: { size: 9 },
+                            },
+                            grid: { color: 'rgba(255,255,255,0.03)' },
+                        }
+                    }
+                }
+            });
         }
 
         // ─── Data Loading ───────────────────────────────────
@@ -399,15 +730,13 @@
                 const res = await fetch('/api/portfolio');
                 const data = await res.json();
 
-                // Update stats
                 document.getElementById('stat-total').textContent = '$' + fmt(data.total_value);
                 document.getElementById('stat-cash').textContent = '$' + fmt(data.cash);
                 
                 const pnlEl = document.getElementById('stat-pnl');
                 pnlEl.textContent = pnlSign(data.total_pnl) + '$' + fmt(Math.abs(data.total_pnl));
-                pnlEl.className = `text-xl font-semibold font-mono ${pnlClass(data.total_pnl)}`;
+                pnlEl.className = `text-base md:text-xl font-semibold font-mono ${pnlClass(data.total_pnl)}`;
 
-                // Holdings
                 const list = document.getElementById('holdings-list');
                 const count = document.getElementById('holdings-count');
 
@@ -438,37 +767,71 @@
                     `).join('');
                 }
 
-                // Allocation bar
-                updateAllocation(data);
+                updateAllocationDonut(data);
 
             } catch (e) {
                 console.error('Portfolio load error:', e);
             }
         }
 
-        function updateAllocation(data) {
-            const bar = document.getElementById('allocation-bar');
+        function updateAllocationDonut(data) {
+            const ctx = document.getElementById('allocation-donut').getContext('2d');
             const legend = document.getElementById('allocation-legend');
             
             if (data.total_value <= 0) return;
 
             const cashPct = (data.cash / data.total_value * 100);
-            const colors = ['#f59e0b', '#a855f7', '#22c55e', '#ef4444', '#06b6d4', '#3b82f6', '#ec4899', '#84cc16'];
-            
-            let barHtml = '';
-            let legendHtml = `<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accent-cyan"></span> Cash ${fmt(cashPct, 0)}%</span>`;
-            
-            barHtml += `<div class="h-full bg-accent-cyan" style="width: ${cashPct}%"></div>`;
-            
+            const holdingColors = ['#f59e0b', '#a855f7', '#22c55e', '#ef4444', '#06b6d4', '#3b82f6', '#ec4899', '#84cc16'];
+
+            const labels = ['Cash'];
+            const values = [cashPct];
+            const colors = ['#06b6d4'];
+
             data.holdings.forEach((h, i) => {
                 const pct = (h.market_value / data.total_value * 100);
-                const color = colors[i % colors.length];
-                barHtml += `<div class="h-full" style="width: ${pct}%; background: ${color}"></div>`;
-                legendHtml += `<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background: ${color}"></span> ${h.symbol} ${fmt(pct, 0)}%</span>`;
+                labels.push(h.symbol);
+                values.push(pct);
+                colors.push(holdingColors[i % holdingColors.length]);
             });
 
-            bar.innerHTML = barHtml;
-            legend.innerHTML = legendHtml;
+            if (allocationDonut) allocationDonut.destroy();
+
+            allocationDonut = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: '#12141f',
+                        borderWidth: 2,
+                        hoverOffset: 6,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    cutout: '65%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1e2030',
+                            titleColor: '#e2e8f0',
+                            bodyColor: '#94a3b8',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                label: ctx => ctx.label + ': ' + fmt(ctx.parsed, 1) + '%',
+                            }
+                        }
+                    }
+                }
+            });
+
+            legend.innerHTML = labels.map((l, i) =>
+                `<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:${colors[i]}"></span> ${l} ${fmt(values[i], 0)}%</span>`
+            ).join('');
         }
 
         async function loadTrades() {
@@ -517,7 +880,6 @@
                 const marketData = await marketRes.json();
                 const watchData = await watchRes.json();
 
-                // Market overview
                 const overview = document.getElementById('market-overview');
                 if (marketData.overview && Object.keys(marketData.overview).length > 0) {
                     overview.innerHTML = Object.entries(marketData.overview).map(([name, data]) => `
@@ -535,15 +897,13 @@
                     overview.innerHTML = '<p class="text-xs text-dark-400">Market data unavailable</p>';
                 }
 
-                // Update market status in header
                 const statusEl = document.getElementById('market-status');
                 const isOpen = marketData.market_open;
                 statusEl.innerHTML = `
                     <span class="w-2 h-2 rounded-full ${isOpen ? 'bg-accent-green' : 'bg-accent-red'} pulse-dot"></span>
-                    <span class="text-dark-300">Market ${isOpen ? 'Open' : 'Closed'}</span>
+                    <span class="text-dark-300 hidden sm:inline">Market ${isOpen ? 'Open' : 'Closed'}</span>
                 `;
 
-                // Watchlist
                 const watchlist = document.getElementById('watchlist');
                 if (watchData.quotes && Object.keys(watchData.quotes).length > 0) {
                     watchlist.innerHTML = Object.entries(watchData.quotes)
@@ -572,7 +932,6 @@
                 const res = await fetch('/api/thoughts?limit=50');
                 const data = await res.json();
                 if (data.thoughts && data.thoughts.length > 0) {
-                    // They come in DESC order, reverse for display
                     const sorted = data.thoughts.reverse();
                     document.getElementById('thought-stream').innerHTML = '';
                     sorted.forEach(t => {
@@ -584,6 +943,56 @@
                 console.error('Initial thoughts load error:', e);
             }
         }
+
+        // ─── Settings ───────────────────────────────────────
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                currentRiskProfile = data.risk_profile || 'moderate';
+                updateSettingsUI(data.risk_profile, data.limits);
+            } catch (e) {
+                console.error('Settings load error:', e);
+            }
+        }
+
+        function updateSettingsUI(profile, limits) {
+            ['safe', 'moderate', 'aggressive'].forEach(p => {
+                const el = document.getElementById(`profile-${p}`);
+                el.classList.toggle('active', p === profile);
+            });
+
+            if (limits) {
+                document.getElementById('limit-position').textContent = limits.max_position_pct + '%';
+                document.getElementById('limit-cash').textContent = limits.min_cash_pct + '%';
+                document.getElementById('limit-holdings').textContent = limits.max_holdings;
+            }
+
+            const badgeIcons = { safe: '🛡️', moderate: '⚖️', aggressive: '🔥' };
+            const badgeLabels = { safe: 'Safe', moderate: 'Moderate', aggressive: 'Aggressive' };
+            document.getElementById('risk-badge-icon').textContent = badgeIcons[profile] || '⚖️';
+            document.getElementById('risk-badge-label').textContent = badgeLabels[profile] || 'Moderate';
+        }
+
+        async function setRiskProfile(profile) {
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ risk_profile: profile }),
+                });
+                const data = await res.json();
+                if (data.status === 'updated') {
+                    currentRiskProfile = data.risk_profile;
+                    updateSettingsUI(data.risk_profile, data.limits);
+                }
+            } catch (e) {
+                console.error('Set profile error:', e);
+            }
+        }
+
+        function openSettings() { document.getElementById('settings-modal').classList.remove('hidden'); }
+        function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
 
         // ─── Actions ────────────────────────────────────────
         async function triggerCycle() {
@@ -612,13 +1021,10 @@
                     } else if (diffMin < 60) {
                         label.textContent = `${session} in ${diffMin}m`;
                     } else {
-                        const hours = Math.floor(diffMin / 60);
-                        const mins = diffMin % 60;
                         const timeStr = next.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
                         label.textContent = `${session} ~${timeStr}`;
                     }
                 } else if (data.last_cycle) {
-                    const last = new Date(data.last_cycle);
                     label.textContent = `Last check: ${timeAgo(data.last_cycle)}`;
                 } else {
                     label.textContent = 'Agent starting...';
@@ -628,24 +1034,34 @@
             }
         }
 
+        // ─── Sparkline Loader ───────────────────────────────
+        async function loadSparkline() {
+            try {
+                const res = await fetch('/api/portfolio/history?days=7');
+                const data = await res.json();
+                updateSparkline(data.snapshots || []);
+            } catch (e) {
+                console.error('Sparkline error:', e);
+            }
+        }
+
         // ─── Init ───────────────────────────────────────────
         async function init() {
             await loadInitialThoughts();
             await loadPortfolio();
             await loadTrades();
             await loadStatus();
+            await loadSettings();
+            await loadSparkline();
             connectSSE();
 
-            // Refresh portfolio every 30 seconds
             setInterval(loadPortfolio, 30000);
-            // Refresh trades every 60 seconds
             setInterval(loadTrades, 60000);
-            // Refresh agent status every 30 seconds
             setInterval(loadStatus, 30000);
+            setInterval(loadSparkline, 60000);
         }
 
         init();
     </script>
 </body>
 </html>
-

@@ -4,13 +4,19 @@ Paper trading engine - executes virtual trades and manages the portfolio.
 from database import (
     get_cash_balance, set_cash_balance,
     get_portfolio, get_holding, update_holding,
-    add_trade, add_thought
+    add_trade, add_thought, get_risk_profile
 )
 from market_data import fetch_quotes
 
 
 COMMISSION_PER_TRADE = 0.0  # Free trades like modern brokerages
 SLIPPAGE_PCT = 0.01  # 0.01% slippage simulation
+
+RISK_PROFILES = {
+    "safe":       {"max_position_pct": 10, "min_cash_pct": 30, "max_holdings": 5},
+    "moderate":   {"max_position_pct": 20, "min_cash_pct": 15, "max_holdings": 10},
+    "aggressive": {"max_position_pct": 35, "min_cash_pct": 5,  "max_holdings": 15},
+}
 
 
 async def execute_buy(symbol: str, shares: float, reasoning: str = "") -> dict:
@@ -32,6 +38,51 @@ async def execute_buy(symbol: str, shares: float, reasoning: str = "") -> dict:
         if max_shares <= 0:
             return {"success": False, "error": f"Not enough cash. Need ${total_cost:.2f}, have ${cash:.2f}"}
         return {"success": False, "error": f"Not enough cash for {shares} shares. Max affordable: {max_shares} shares"}
+
+    # Enforce risk profile limits
+    risk_profile = await get_risk_profile()
+    limits = RISK_PROFILES.get(risk_profile, RISK_PROFILES["moderate"])
+
+    portfolio = await get_portfolio()
+    all_quotes = await fetch_quotes([h["symbol"] for h in portfolio] + [symbol])
+    total_market_value = sum(
+        h["shares"] * all_quotes.get(h["symbol"], {}).get("price", h["avg_cost"])
+        for h in portfolio
+    )
+    total_portfolio = cash + total_market_value
+
+    # Check max position size
+    existing_holding = await get_holding(symbol)
+    current_position_value = 0
+    if existing_holding:
+        current_position_value = existing_holding["shares"] * exec_price
+    new_position_value = current_position_value + total_cost
+    position_pct = (new_position_value / total_portfolio * 100) if total_portfolio > 0 else 100
+
+    if position_pct > limits["max_position_pct"]:
+        max_allowed = total_portfolio * limits["max_position_pct"] / 100 - current_position_value
+        max_shares = int(max_allowed / exec_price) if max_allowed > 0 else 0
+        return {
+            "success": False,
+            "error": f"Risk limit: {symbol} would be {position_pct:.1f}% of portfolio (max {limits['max_position_pct']}% in {risk_profile} mode). Max additional shares: {max_shares}"
+        }
+
+    # Check cash minimum
+    new_cash_after = cash - total_cost
+    new_cash_pct = (new_cash_after / total_portfolio * 100) if total_portfolio > 0 else 0
+    if new_cash_pct < limits["min_cash_pct"]:
+        return {
+            "success": False,
+            "error": f"Risk limit: cash would drop to {new_cash_pct:.1f}% (min {limits['min_cash_pct']}% in {risk_profile} mode)"
+        }
+
+    # Check max holdings count
+    distinct_symbols = set(h["symbol"] for h in portfolio if h["shares"] > 0)
+    if symbol not in distinct_symbols and len(distinct_symbols) >= limits["max_holdings"]:
+        return {
+            "success": False,
+            "error": f"Risk limit: already at {len(distinct_symbols)} positions (max {limits['max_holdings']} in {risk_profile} mode)"
+        }
 
     # Update cash
     new_cash = round(cash - total_cost, 2)

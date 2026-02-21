@@ -49,33 +49,62 @@ async def fetch_quotes(symbols: list[str]) -> dict:
     return await loop.run_in_executor(_executor, _fetch_quotes_sync, symbols)
 
 
+def _calculate_rsi(prices, period: int = 14) -> float | None:
+    """Calculate RSI (Relative Strength Index) for a price series."""
+    if len(prices) < period + 1:
+        return None
+    deltas = prices.diff().dropna()
+    gains = deltas.where(deltas > 0, 0.0)
+    losses = (-deltas).where(deltas < 0, 0.0)
+    avg_gain = gains.rolling(window=period, min_periods=period).mean().iloc[-1]
+    avg_loss = losses.rolling(window=period, min_periods=period).mean().iloc[-1]
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100 - (100 / (1 + rs)), 2)
+
+
 def _fetch_stock_detail_sync(symbol: str) -> dict:
     """Fetch detailed info for a single stock."""
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.info or {}
-        hist = ticker.history(period="1mo")
+        hist = ticker.history(period="3mo")
 
-        # Calculate some analytics
+        rsi = None
         if not hist.empty:
             prices = hist["Close"]
             current = float(prices.iloc[-1])
             month_ago = float(prices.iloc[0])
             month_change = ((current - month_ago) / month_ago * 100) if month_ago else 0
 
-            # Simple moving averages
             sma_5 = float(prices.tail(5).mean()) if len(prices) >= 5 else current
             sma_20 = float(prices.tail(20).mean()) if len(prices) >= 20 else current
 
-            # Volatility (std of daily returns)
             returns = prices.pct_change().dropna()
             volatility = float(returns.std() * 100) if len(returns) > 1 else 0
+
+            rsi = _calculate_rsi(prices)
         else:
             current = 0
             month_change = 0
             sma_5 = 0
             sma_20 = 0
             volatility = 0
+
+        # Earnings date
+        earnings_date = None
+        try:
+            cal = ticker.calendar
+            if cal is not None:
+                if isinstance(cal, dict) and "Earnings Date" in cal:
+                    dates = cal["Earnings Date"]
+                    if dates:
+                        earnings_date = str(dates[0]) if isinstance(dates, list) else str(dates)
+                elif hasattr(cal, "columns") and "Earnings Date" in cal.columns:
+                    earnings_date = str(cal["Earnings Date"].iloc[0])
+        except Exception:
+            pass
 
         return {
             "symbol": symbol,
@@ -93,6 +122,12 @@ def _fetch_stock_detail_sync(symbol: str) -> dict:
             "sma_5": round(sma_5, 2),
             "sma_20": round(sma_20, 2),
             "volatility": round(volatility, 2),
+            "rsi_14": rsi,
+            "earnings_date": earnings_date,
+            "revenue_growth": info.get("revenueGrowth", None),
+            "earnings_growth": info.get("earningsGrowth", None),
+            "debt_to_equity": info.get("debtToEquity", None),
+            "free_cash_flow": info.get("freeCashflow", None),
             "recommendation": info.get("recommendationKey", "none"),
         }
     except Exception as e:

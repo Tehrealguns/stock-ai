@@ -15,7 +15,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from database import init_db, reset_db, get_thoughts, get_trades, get_watchlist, add_to_watchlist, get_cash_balance
+from database import (
+    init_db, reset_db, get_thoughts, get_trades, get_watchlist,
+    add_to_watchlist, get_cash_balance, get_portfolio_snapshots,
+    get_risk_profile, set_risk_profile
+)
 from trading import get_portfolio_summary
 from market_data import fetch_quotes, fetch_market_overview, is_market_hours
 from agent import start_agent_loop, stop_agent, trigger_cycle
@@ -151,6 +155,55 @@ async def api_add_watchlist(symbol: str):
     try:
         await add_to_watchlist(symbol.upper())
         return JSONResponse(content={"status": "added", "symbol": symbol.upper()})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/api/portfolio/history")
+async def api_portfolio_history(days: int = 30):
+    """Get portfolio value history for charts."""
+    try:
+        snapshots = await get_portfolio_snapshots(days=days)
+        return JSONResponse(content={"snapshots": snapshots})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/api/settings")
+async def api_get_settings():
+    """Get current settings including risk profile and Twitter status."""
+    try:
+        profile = await get_risk_profile()
+        from trading import RISK_PROFILES
+        from notifications import is_enabled as twitter_is_enabled
+        limits = RISK_PROFILES.get(profile, RISK_PROFILES["moderate"])
+        return JSONResponse(content={
+            "risk_profile": profile,
+            "limits": limits,
+            "twitter_enabled": twitter_is_enabled(),
+        })
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.post("/api/settings")
+async def api_update_settings(request: Request):
+    """Update settings (risk profile)."""
+    try:
+        body = await request.json()
+        profile = body.get("risk_profile")
+        if profile:
+            await set_risk_profile(profile)
+        current = await get_risk_profile()
+        from trading import RISK_PROFILES
+        limits = RISK_PROFILES.get(current, RISK_PROFILES["moderate"])
+        return JSONResponse(content={
+            "status": "updated",
+            "risk_profile": current,
+            "limits": limits,
+        })
+    except ValueError as e:
+        return JSONResponse(content={"error": str(e)}, status_code=400)
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 

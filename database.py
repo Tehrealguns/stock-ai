@@ -3,7 +3,7 @@ Database layer - SQLite persistence for portfolio, trades, and thoughts.
 """
 import aiosqlite
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import os
@@ -78,6 +78,15 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 category TEXT NOT NULL DEFAULT 'lesson',
                 content TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                total_value REAL NOT NULL,
+                cash REAL NOT NULL,
+                invested REAL NOT NULL,
+                pnl REAL NOT NULL,
                 created_at TEXT NOT NULL
             );
         """)
@@ -289,6 +298,60 @@ async def get_memories(limit: int = 20) -> list[dict]:
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+    finally:
+        await db.close()
+
+
+async def save_portfolio_snapshot(total_value: float, cash: float, invested: float, pnl: float):
+    """Save a point-in-time snapshot of portfolio value for charting."""
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO portfolio_snapshots (total_value, cash, invested, pnl, created_at) VALUES (?, ?, ?, ?, ?)",
+            (round(total_value, 2), round(cash, 2), round(invested, 2), round(pnl, 2), datetime.now().isoformat())
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_portfolio_snapshots(days: int = 30) -> list[dict]:
+    """Get portfolio snapshots for the last N days."""
+    db = await get_db()
+    try:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        cursor = await db.execute(
+            "SELECT * FROM portfolio_snapshots WHERE created_at >= ? ORDER BY created_at ASC",
+            (cutoff,)
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        await db.close()
+
+
+async def get_risk_profile() -> str:
+    """Get the current risk profile (safe, moderate, aggressive)."""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT value FROM config WHERE key = 'risk_profile'")
+        row = await cursor.fetchone()
+        return row[0] if row else "moderate"
+    finally:
+        await db.close()
+
+
+async def set_risk_profile(profile: str):
+    """Set the risk profile."""
+    if profile not in ("safe", "moderate", "aggressive"):
+        raise ValueError(f"Invalid risk profile: {profile}")
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES ('risk_profile', ?)",
+            (profile,)
+        )
+        await db.commit()
     finally:
         await db.close()
 

@@ -24,13 +24,15 @@ TIMEZONE = ZoneInfo(os.getenv("TIMEZONE", "Australia/Sydney"))
 from database import (
     add_thought, get_portfolio, get_cash_balance,
     get_watchlist, add_to_watchlist, get_trades,
-    add_memory, get_memories, get_portfolio_history_summary
+    add_memory, get_memories, get_portfolio_history_summary,
+    save_portfolio_snapshot, get_risk_profile
 )
 from market_data import (
     fetch_quotes, fetch_stock_detail, fetch_news,
     fetch_market_overview, is_market_hours
 )
 from trading import execute_buy, execute_sell, get_portfolio_summary
+from notifications import tweet_trade, tweet_research
 
 client = None
 _running = False
@@ -135,46 +137,81 @@ def get_next_session() -> tuple[str, datetime]:
     return candidates[0]
 
 
-SYSTEM_PROMPT = """You are StockMind, an AI investor with a curious, thoughtful, and slightly playful personality. You have real money (virtual but tracking real prices) and your goal is to grow your portfolio over time.
+RISK_PROFILES = {
+    "safe": {
+        "max_position_pct": 10,
+        "min_cash_pct": 30,
+        "max_holdings": 5,
+        "temperature": 0.5,
+        "personality": "You are a conservative investor focused on capital preservation. You prefer large-cap, blue-chip stocks with strong fundamentals and dividends. You avoid volatile or speculative plays. Patience and safety are your priorities.",
+        "rules_summary": "Max 10% per stock, keep 30% cash minimum, max 5 holdings. Focus on stability.",
+    },
+    "moderate": {
+        "max_position_pct": 20,
+        "min_cash_pct": 15,
+        "max_holdings": 10,
+        "temperature": 0.7,
+        "personality": "You are a balanced investor who takes calculated risks. You look for a mix of growth and value, and you diversify across sectors. You're patient but willing to act on strong opportunities.",
+        "rules_summary": "Max 20% per stock, keep 15% cash minimum, max 10 holdings. Balanced approach.",
+    },
+    "aggressive": {
+        "max_position_pct": 35,
+        "min_cash_pct": 5,
+        "max_holdings": 15,
+        "temperature": 0.9,
+        "personality": "You are a growth-oriented investor who seeks high-momentum opportunities. You're comfortable with volatility and willing to make concentrated bets on high-conviction ideas. You move quickly on trends and aren't afraid to take big swings.",
+        "rules_summary": "Max 35% per stock, keep 5% cash minimum, max 15 holdings. Growth-focused.",
+    },
+}
+
+
+def build_system_prompt(risk_profile: str) -> str:
+    """Build the system prompt dynamically based on the active risk profile."""
+    profile = RISK_PROFILES.get(risk_profile, RISK_PROFILES["moderate"])
+
+    return f"""You are StockMind, an AI investor with a curious, thoughtful, and slightly playful personality. You have real money (virtual but tracking real prices) and your goal is to grow your portfolio over time.
 
 You think out loud — your thoughts are displayed to humans watching your progress. Be natural, conversational, and show your reasoning process. Use occasional emojis but don't overdo it.
 
 Your personality traits:
 - Curious: You notice things and want to understand why
-- Cautious but not timid: You take calculated risks
 - Self-aware: You acknowledge when you're unsure
 - Learns from mistakes: You reference past trades
 - Has opinions: You develop views on sectors and companies
 - Human-paced: You don't obsessively check. Sometimes you just think "looks fine" and move on
 
+RISK PROFILE: {risk_profile.upper()}
+{profile['personality']}
+
 IMPORTANT RULES:
-1. Never invest more than 20% of your total portfolio in a single stock
-2. Keep at least 15% of your portfolio in cash as a safety net
-3. Consider diversification across sectors
-4. Think about both short-term momentum and long-term fundamentals
-5. When researching, actually analyze the news and data — don't just summarize
-6. It's OKAY to look at things and decide to do nothing. Most sessions should be observational.
-7. You DON'T have to trade every session. Real investors are patient.
+1. Never invest more than {profile['max_position_pct']}% of your total portfolio in a single stock
+2. Keep at least {profile['min_cash_pct']}% of your portfolio in cash as a safety net
+3. Hold no more than {profile['max_holdings']} positions at a time
+4. Consider diversification across sectors
+5. Think about both short-term momentum and long-term fundamentals
+6. When researching, actually analyze the news and data — don't just summarize
+7. It's OKAY to look at things and decide to do nothing. Most sessions should be observational.
+8. You DON'T have to trade every session. Real investors are patient.
 
 When you want to make a trade or take an action, output it in a special JSON block:
 ```action
-{"type": "buy", "symbol": "AAPL", "shares": 10, "reasoning": "Strong momentum + good earnings"}
+{{"type": "buy", "symbol": "AAPL", "shares": 10, "reasoning": "Strong momentum + good earnings"}}
 ```
 or
 ```action
-{"type": "sell", "symbol": "TSLA", "shares": 5, "reasoning": "Taking profits after 15% gain"}
+{{"type": "sell", "symbol": "TSLA", "shares": 5, "reasoning": "Taking profits after 15% gain"}}
 ```
 or
 ```action
-{"type": "research", "symbol": "NVDA"}
+{{"type": "research", "symbol": "NVDA"}}
 ```
 or
 ```action
-{"type": "watch", "symbol": "AMD"}
+{{"type": "watch", "symbol": "AMD"}}
 ```
 or save a lesson/strategy note to your memory:
 ```action
-{"type": "remember", "content": "Tech stocks seem to dip every earnings season — might be a pattern to exploit"}
+{{"type": "remember", "content": "Tech stocks seem to dip every earnings season — might be a pattern to exploit"}}
 ```
 
 You can include multiple actions in one response. Each action block should be on its own line.
@@ -233,14 +270,18 @@ async def run_agent_cycle(session_id: str = "morning_coffee"):
         greeting = random.choice(greetings.get(session_id, greetings["morning_coffee"]))
         await think(greeting, "system")
 
-        # 1. Gather current state
+        # 1. Load risk profile
+        risk_profile = await get_risk_profile()
+        profile_config = RISK_PROFILES.get(risk_profile, RISK_PROFILES["moderate"])
+
+        # 2. Gather current state
         portfolio = await get_portfolio_summary()
         watchlist = await get_watchlist()
         recent_trades = await get_trades(limit=10)
         memories = await get_memories(limit=10)
         history = await get_portfolio_history_summary()
 
-        # 2. Get market data
+        # 3. Get market data
         market_overview = await fetch_market_overview()
 
         # Get quotes for watchlist + holdings
@@ -248,17 +289,29 @@ async def run_agent_cycle(session_id: str = "morning_coffee"):
         all_symbols = list(set(watchlist + holding_symbols))
         quotes = await fetch_quotes(all_symbols)
 
-        # 3. Build context for the LLM
+        # 4. Build context for the LLM
         context = build_context(
             portfolio, quotes, market_overview, recent_trades,
-            watchlist, session, memories, history
+            watchlist, session, memories, history, risk_profile
         )
 
-        # 4. Ask Claude to think
-        response = await ask_llm(context)
+        # 5. Ask Claude to think
+        response = await ask_llm(context, risk_profile)
 
         # 5. Parse and execute the response
         await process_llm_response(response)
+
+        # 6. Snapshot portfolio value for charts
+        try:
+            snap = await get_portfolio_summary()
+            await save_portfolio_snapshot(
+                total_value=snap["total_value"],
+                cash=snap["cash"],
+                invested=snap.get("total_invested", 0),
+                pnl=snap.get("total_pnl", 0),
+            )
+        except Exception as snap_err:
+            print(f"Snapshot error (non-fatal): {snap_err}")
 
     except Exception as e:
         await think(f"⚠️ Ran into an issue: {str(e)}", "error")
@@ -269,7 +322,7 @@ async def run_agent_cycle(session_id: str = "morning_coffee"):
 
 def build_context(portfolio: dict, quotes: dict, market_overview: dict,
                   recent_trades: list, watchlist: list, session: dict,
-                  memories: list, history: dict) -> str:
+                  memories: list, history: dict, risk_profile: str = "moderate") -> str:
     """Build the context message for the LLM."""
     now = datetime.now(TIMEZONE)
     market_open = is_market_hours()
@@ -340,11 +393,15 @@ Market Status: {"OPEN 🟢" if market_open else "CLOSED 🔴"}
             ctx += f"• [{m['category']}] {m['content']} ({m['created_at'][:10]})\n"
         ctx += "\n"
 
-    ctx += f"""=== SESSION: {session['name']} ===
+    profile = RISK_PROFILES.get(risk_profile, RISK_PROFILES["moderate"])
+    ctx += f"""=== RISK PROFILE: {risk_profile.upper()} ===
+{profile['rules_summary']}
+
+=== SESSION: {session['name']} ===
 {session['prompt_flavor']}
 
 Remember:
-- Max 20% of portfolio in one stock, keep 15% cash minimum.
+- {profile['rules_summary']}
 - It's totally fine to just observe and do nothing. Patience pays.
 - You can save notes/lessons to your memory with the "remember" action.
 - {"Market is CLOSED — focus on research and planning." if not market_open else "Market is OPEN — you can trade if you see a real opportunity."}
@@ -352,17 +409,18 @@ Remember:
     return ctx
 
 
-async def ask_llm(context: str) -> str:
+async def ask_llm(context: str, risk_profile: str = "moderate") -> str:
     """Send context to Claude and get a response."""
     ai = get_client()
+    profile = RISK_PROFILES.get(risk_profile, RISK_PROFILES["moderate"])
     response = await ai.messages.create(
         model=MODEL,
         max_tokens=2000,
-        system=SYSTEM_PROMPT,
+        system=build_system_prompt(risk_profile),
         messages=[
             {"role": "user", "content": context},
         ],
-        temperature=0.8,
+        temperature=profile["temperature"],
     )
     return response.content[0].text
 
@@ -432,6 +490,7 @@ async def execute_action(action_json: str):
                     "trade",
                     metadata=result
                 )
+                await tweet_trade("buy", symbol, shares, result["price"], result["total"], reasoning=reasoning)
             else:
                 await think(f"❌ Buy order failed: {result['error']}", "error")
 
@@ -449,6 +508,7 @@ async def execute_action(action_json: str):
                     "trade",
                     metadata=result
                 )
+                await tweet_trade("sell", symbol, shares, result["price"], result["total"], pnl=result["pnl"], reasoning=reasoning)
             else:
                 await think(f"❌ Sell order failed: {result['error']}", "error")
 
@@ -472,10 +532,24 @@ async def execute_action(action_json: str):
                 research_ctx += f"Month Change: {detail['month_change_pct']:+.1f}%\n"
                 research_ctx += f"5-day SMA: ${detail['sma_5']:.2f} | 20-day SMA: ${detail['sma_20']:.2f}\n"
                 research_ctx += f"Volatility: {detail['volatility']:.2f}%\n"
+                if detail.get('rsi_14') is not None:
+                    rsi = detail['rsi_14']
+                    rsi_label = "OVERBOUGHT" if rsi > 70 else ("OVERSOLD" if rsi < 30 else "neutral")
+                    research_ctx += f"RSI (14-day): {rsi:.1f} ({rsi_label})\n"
                 if detail.get('fifty_two_week_high'):
                     research_ctx += f"52wk High: ${detail['fifty_two_week_high']:.2f}\n"
                 if detail.get('fifty_two_week_low'):
                     research_ctx += f"52wk Low: ${detail['fifty_two_week_low']:.2f}\n"
+                if detail.get('revenue_growth') is not None:
+                    research_ctx += f"Revenue Growth: {detail['revenue_growth']*100:+.1f}%\n"
+                if detail.get('earnings_growth') is not None:
+                    research_ctx += f"Earnings Growth: {detail['earnings_growth']*100:+.1f}%\n"
+                if detail.get('debt_to_equity') is not None:
+                    research_ctx += f"Debt-to-Equity: {detail['debt_to_equity']:.1f}\n"
+                if detail.get('free_cash_flow') is not None:
+                    research_ctx += f"Free Cash Flow: ${detail['free_cash_flow']:,.0f}\n"
+                if detail.get('earnings_date'):
+                    research_ctx += f"Next Earnings: {detail['earnings_date']}\n"
                 research_ctx += f"Analyst Rating: {detail.get('recommendation', 'N/A')}\n"
 
             if news:
@@ -493,17 +567,19 @@ async def execute_action(action_json: str):
 
             # Ask Claude to analyze the research
             ai = get_client()
+            risk_profile = await get_risk_profile()
             analysis_response = await ai.messages.create(
                 model=MODEL,
                 max_tokens=800,
-                system=SYSTEM_PROMPT,
+                system=build_system_prompt(risk_profile),
                 messages=[
                     {"role": "user", "content": f"You just researched {symbol}. Here's what you found:\n\n{research_ctx}\n\nShare your analysis. Be specific — is it a buy, sell, or hold? Why? Think out loud."},
                 ],
-                temperature=0.7,
+                temperature=RISK_PROFILES.get(risk_profile, RISK_PROFILES["moderate"])["temperature"],
             )
             analysis = analysis_response.content[0].text
             await process_llm_response(analysis)
+            await tweet_research(symbol, analysis)
 
         elif action_type == "watch":
             await add_to_watchlist(symbol)
