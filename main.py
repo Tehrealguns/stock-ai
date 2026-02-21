@@ -76,6 +76,13 @@ async def root():
     return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
 
 
+@app.get("/about", response_class=HTMLResponse)
+async def about():
+    """Serve the about page."""
+    about_path = static_dir / "about.html"
+    return HTMLResponse(content=about_path.read_text(encoding="utf-8"))
+
+
 @app.get("/api/portfolio")
 async def api_portfolio():
     """Get current portfolio summary with live prices."""
