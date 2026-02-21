@@ -344,17 +344,17 @@
                 <div class="p-4 md:p-6">
                     <h3 class="text-xs font-medium uppercase tracking-wider text-dark-300 mb-3 md:mb-4">Risk Profile</h3>
                     <div class="grid grid-cols-3 gap-2 md:gap-3 mb-4 md:mb-6">
-                        <div onclick="setRiskProfile('safe')" id="profile-safe" class="profile-card rounded-xl p-3 md:p-4 gradient-border">
+                        <div id="profile-safe" class="profile-card rounded-xl p-3 md:p-4 gradient-border" style="cursor: default;">
                             <div class="text-xl md:text-2xl mb-1 md:mb-2">🛡️</div>
                             <h4 class="text-xs md:text-sm font-semibold mb-0.5 md:mb-1">Safe</h4>
                             <p class="text-[9px] md:text-[10px] text-dark-300 leading-relaxed">Capital preservation. Blue-chip, low volatility.</p>
                         </div>
-                        <div onclick="setRiskProfile('moderate')" id="profile-moderate" class="profile-card rounded-xl p-3 md:p-4 gradient-border">
+                        <div id="profile-moderate" class="profile-card rounded-xl p-3 md:p-4 gradient-border" style="cursor: default;">
                             <div class="text-xl md:text-2xl mb-1 md:mb-2">⚖️</div>
                             <h4 class="text-xs md:text-sm font-semibold mb-0.5 md:mb-1">Moderate</h4>
                             <p class="text-[9px] md:text-[10px] text-dark-300 leading-relaxed">Balanced growth. Value and momentum mix.</p>
                         </div>
-                        <div onclick="setRiskProfile('aggressive')" id="profile-aggressive" class="profile-card rounded-xl p-3 md:p-4 gradient-border">
+                        <div id="profile-aggressive" class="profile-card rounded-xl p-3 md:p-4 gradient-border" style="cursor: default;">
                             <div class="text-xl md:text-2xl mb-1 md:mb-2">🔥</div>
                             <h4 class="text-xs md:text-sm font-semibold mb-0.5 md:mb-1">Aggressive</h4>
                             <p class="text-[9px] md:text-[10px] text-dark-300 leading-relaxed">High growth. Concentrated bets, momentum.</p>
@@ -972,23 +972,6 @@
             const badgeLabels = { safe: 'Safe', moderate: 'Moderate', aggressive: 'Aggressive' };
             document.getElementById('risk-badge-icon').textContent = badgeIcons[profile] || '⚖️';
             document.getElementById('risk-badge-label').textContent = badgeLabels[profile] || 'Moderate';
-        }
-
-        async function setRiskProfile(profile) {
-            try {
-                const res = await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ risk_profile: profile }),
-                });
-                const data = await res.json();
-                if (data.status === 'updated') {
-                    currentRiskProfile = data.risk_profile;
-                    updateSettingsUI(data.risk_profile, data.limits);
-                }
-            } catch (e) {
-                console.error('Set profile error:', e);
-            }
         }
 
         function openSettings() { document.getElementById('settings-modal').classList.remove('hidden'); }
