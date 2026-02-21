@@ -519,24 +519,31 @@
             `;
             stream.appendChild(div);
             thoughts.push(thought);
-            stream.scrollTop = stream.scrollHeight;
+            if (!skipAnimation) stream.scrollTop = stream.scrollHeight;
             document.getElementById('thought-count').textContent = `${thoughts.length} thoughts`;
         }
 
         // ─── SSE Connection ─────────────────────────────────
+        let sseReady = false;
+
         function connectSSE() {
             if (eventSource) eventSource.close();
             eventSource = new EventSource('/api/stream');
             eventSource.addEventListener('thought', (e) => {
+                if (!sseReady) return;
                 const thought = JSON.parse(e.data);
                 if (thought.id > lastThoughtId) {
                     lastThoughtId = thought.id;
                     addThought(thought);
                 }
             });
+            eventSource.onopen = () => {
+                setTimeout(() => { sseReady = true; }, 3000);
+            };
             eventSource.onerror = () => {
+                sseReady = false;
                 console.log('SSE connection lost, reconnecting...');
-                setTimeout(connectSSE, 5000);
+                setTimeout(connectSSE, 10000);
             };
         }
 
