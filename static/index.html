@@ -1040,10 +1040,10 @@
             await loadSparkline();
             connectSSE();
 
-            setInterval(loadPortfolio, 30000);
-            setInterval(loadTrades, 60000);
-            setInterval(loadStatus, 30000);
-            setInterval(loadSparkline, 60000);
+            setInterval(loadPortfolio, 60000);
+            setInterval(loadTrades, 120000);
+            setInterval(loadStatus, 60000);
+            setInterval(loadSparkline, 300000);
         }
 
         init();
