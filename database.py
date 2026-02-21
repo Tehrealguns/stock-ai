@@ -101,8 +101,17 @@ async def init_db():
                 "INSERT INTO config (key, value) VALUES ('cash_balance', ?)",
                 (starting,)
             )
-            # Default watchlist
-            default_symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "JPM", "V", "JNJ"]
+            # Default watchlist — diverse across sectors and market caps
+            default_symbols = [
+                "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META",  # tech
+                "JPM", "V", "GS",                                          # finance
+                "JNJ", "UNH", "PFE",                                       # healthcare
+                "XOM", "NEE",                                               # energy
+                "CAT", "DE",                                                # industrials
+                "COST", "NKE", "SBUX",                                      # consumer
+                "AMD", "PLTR", "SOFI", "RKLB", "HOOD", "COIN", "SQ",       # growth / mid-cap
+                "RIVN", "MARA", "SMCI",                                     # speculative / volatile
+            ]
             for sym in default_symbols:
                 await db.execute(
                     "INSERT OR IGNORE INTO watchlist (symbol, added_at) VALUES (?, ?)",
