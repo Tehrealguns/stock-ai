@@ -353,11 +353,20 @@ Market Status: {"OPEN 🟢" if market_open else "CLOSED 🔴"}
 
     if portfolio["holdings"]:
         ctx += "=== MY HOLDINGS ===\n"
+        profile = RISK_PROFILES.get(risk_profile, RISK_PROFILES["moderate"])
+        overlimit = []
         for h in portfolio["holdings"]:
             emoji = "🟢" if h["pnl"] >= 0 else "🔴"
+            pct_of_portfolio = (h['market_value'] / portfolio['total_value'] * 100) if portfolio['total_value'] > 0 else 0
+            warning = ""
+            if pct_of_portfolio > profile['max_position_pct']:
+                warning = f" ⚠️ OVER LIMIT ({pct_of_portfolio:.0f}% > {profile['max_position_pct']}% max)"
+                overlimit.append(h['symbol'])
             ctx += (f"{emoji} {h['symbol']}: {h['shares']} shares @ ${h['avg_cost']:.2f} avg → "
                     f"now ${h['current_price']:.2f} | P&L: {'+' if h['pnl'] >= 0 else ''}${h['pnl']:.2f} "
-                    f"({h['pnl_pct']:+.1f}%) | Today: {h['day_change_pct']:+.1f}%\n")
+                    f"({h['pnl_pct']:+.1f}%) | Today: {h['day_change_pct']:+.1f}% | Weight: {pct_of_portfolio:.1f}%{warning}\n")
+        if overlimit:
+            ctx += f"\n⚠️ REBALANCING NEEDED: {', '.join(overlimit)} exceed the {profile['max_position_pct']}% position limit. Consider trimming these positions to free up cash and stay within risk limits.\n"
         ctx += "\n"
 
     if market_overview:
