@@ -507,6 +507,7 @@ async def execute_action(action_json: str):
                 await tweet_trade("buy", symbol, shares, result["price"], result["total"], reasoning=reasoning)
             else:
                 await think(f"❌ Buy order failed: {result['error']}", "error")
+                await add_memory("lesson", f"Order rejected: tried to buy {shares} {symbol} but hit risk limit — {result['error']}")
 
         elif action_type == "sell":
             shares = action.get("shares", 0)
@@ -525,6 +526,7 @@ async def execute_action(action_json: str):
                 await tweet_trade("sell", symbol, shares, result["price"], result["total"], pnl=result["pnl"], reasoning=reasoning)
             else:
                 await think(f"❌ Sell order failed: {result['error']}", "error")
+                await add_memory("lesson", f"Sell rejected: tried to sell {shares} {symbol} — {result['error']}")
 
         elif action_type == "research":
             await think(f"🔍 Researching {symbol}... let me dig into this.", "research")
