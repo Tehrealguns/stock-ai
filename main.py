@@ -168,9 +168,16 @@ async def api_add_watchlist(symbol: str):
 
 @app.get("/api/portfolio/history")
 async def api_portfolio_history(days: int = 30):
-    """Get portfolio value history for charts."""
+    """Get portfolio value history for charts, aggregated to one point per day."""
     try:
         snapshots = await get_portfolio_snapshots(days=days)
+
+        daily = {}
+        for s in snapshots:
+            day = s["created_at"][:10]
+            daily[day] = s
+        snapshots = list(daily.values())
+
         return JSONResponse(content={"snapshots": snapshots})
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
