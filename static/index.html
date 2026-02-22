@@ -416,8 +416,15 @@
         function pnlClass(n) { return n >= 0 ? 'text-accent-green' : 'text-accent-red'; }
         function pnlSign(n) { return n >= 0 ? '+' : ''; }
 
+        function parseApiDate(dateStr) {
+            if (!dateStr) return new Date(NaN);
+            // Treat naive timestamps as UTC so devices render local time correctly.
+            if (/[zZ]$|[+-]\d{2}:\d{2}$/.test(dateStr)) return new Date(dateStr);
+            return new Date(dateStr + 'Z');
+        }
+
         function timeAgo(dateStr) {
-            const date = new Date(dateStr);
+            const date = parseApiDate(dateStr);
             const now = new Date();
             const diff = Math.floor((now - date) / 1000);
             if (diff < 60) return 'just now';
@@ -606,7 +613,7 @@
             }
 
             const labels = snapshots.map(s => {
-                const d = new Date(s.created_at);
+                const d = parseApiDate(s.created_at);
                 return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
             });
             const values = snapshots.map(s => s.total_value);
@@ -681,7 +688,7 @@
             if (snapshots.length === 0) { pnlChart = null; return; }
 
             const labels = snapshots.map(s => {
-                const d = new Date(s.created_at);
+                const d = parseApiDate(s.created_at);
                 return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
             });
             const pnlValues = snapshots.map(s => s.pnl);
