@@ -32,7 +32,7 @@ from market_data import (
     fetch_market_overview, is_market_hours
 )
 from trading import execute_buy, execute_sell, get_portfolio_summary
-from notifications import tweet_trade, tweet_research
+from notifications import tweet_trade, tweet_research, tweet_session_summary
 
 client = None
 _running = False
@@ -302,7 +302,7 @@ async def run_agent_cycle(session_id: str = "morning_coffee"):
         # 5. Parse and execute the response
         await process_llm_response(response)
 
-        # 6. Snapshot portfolio value for charts
+        # 6. Snapshot portfolio value for charts + tweet summary
         try:
             snap = await get_portfolio_summary()
             await save_portfolio_snapshot(
@@ -311,8 +311,14 @@ async def run_agent_cycle(session_id: str = "morning_coffee"):
                 invested=snap.get("total_invested", 0),
                 pnl=snap.get("total_pnl", 0),
             )
+            await tweet_session_summary(
+                session["name"],
+                snap["total_value"],
+                snap.get("total_pnl", 0),
+                len(snap.get("holdings", [])),
+            )
         except Exception as snap_err:
-            print(f"Snapshot error (non-fatal): {snap_err}")
+            print(f"Snapshot/tweet error (non-fatal): {snap_err}")
 
     except Exception as e:
         await think(f"⚠️ Ran into an issue: {str(e)}", "error")

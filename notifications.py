@@ -107,8 +107,21 @@ async def tweet_trade(
 async def tweet_research(symbol: str, analysis: str) -> bool:
     link = f"\n\n{DASHBOARD_URL}"
     prefix = f"StockMind analyzed ${symbol}: "
-    available = 280 - len(prefix) - 25  # t.co link + newlines
+    available = 280 - len(prefix) - 25
     clean = " ".join(analysis.split())
     if len(clean) > available:
         clean = clean[: available - 3].rstrip() + "..."
     return await tweet(prefix + clean + link)
+
+
+async def tweet_session_summary(session_name: str, portfolio_value: float, pnl: float, holdings_count: int) -> bool:
+    link = f"\n\n{DASHBOARD_URL}"
+    pnl_sign = "+" if pnl >= 0 else ""
+    msg = (
+        f"StockMind {session_name.lower()} update: "
+        f"Portfolio ${portfolio_value:,.0f} | "
+        f"P&L {pnl_sign}{_fmt_money(pnl)} | "
+        f"{holdings_count} position{'s' if holdings_count != 1 else ''}"
+    )
+    msg += link
+    return await tweet(msg)
